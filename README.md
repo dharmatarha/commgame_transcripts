@@ -3,7 +3,8 @@
 Participants in the CommGame experiments have been recorded with HSE-150/SK stage microphones attached to IMG Stageline EMA-1 adapters, sampled by ESI Maya22 audio interfaces at 44100 Hz. Audio is stored in uncompressed 16-bit PCM format.  
 
 For transcript generation, audio is first (1) preprocessed, then (2) filtered for background noise, optionally (3) further filtered in terms of overall power, then (4) segmented by a voice detector, and finally (5) transcribed by an ASR model.  
-The pipeline relies on the following projects:  
+The pipeline relies on the following great projects:  
+
 * [noisereduce package](https://github.com/timsainb/noisereduce)
 * [Silero Voice Activity Detector](https://github.com/snakers4/silero-vad)
 * [The BEA Speech Transcriber (BEAST2) model](https://phon.nytud.hu/bea/bea-base.html?lang=en)
