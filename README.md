@@ -17,7 +17,7 @@ The pipeline relies on the following great projects:
 4. The outputs are two mono wav files containing the preprocessed audio streams from the two labs. They are trimmed to start at the `sharedStartTime` timestamp and to end when the shorter of the two finishes.
 
 ### (2) Noise reduction  
-**Python using [noisereduce](https://github.com/timsainb/noisereduce)**
+**Python using [noisereduce](https://github.com/timsainb/noisereduce)**  
 Recordings were often sensitive enough to pick up not only speech from the participant wearing the microphone but also the other participant's speech streamed from the other lab and played from a speaker (crosstalk).  
 The noise reduction step aims to eliminate both crosstalk and the oocasional line noise. Could be an optional step depending on the amount of crosstalk but has been used so far for all COmmGame audio analysis.  
 Wrapper for calling noise reduction (with potentially multiple parameter combinations is “noise_reduce_wrapper.py” in the “rater_task” repo.
