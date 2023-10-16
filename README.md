@@ -8,6 +8,9 @@ The pipeline relies on the following great projects:
 * [noisereduce package](https://github.com/timsainb/noisereduce)
 * [Silero Voice Activity Detector](https://github.com/snakers4/silero-vad)
 * [The BEA Speech Transcriber (BEAST2) model](https://phon.nytud.hu/bea/bea-base.html?lang=en)
+  
+The pipeline is prepared for Ubuntu 22.04 LTS as the target system. Matlab part has been tested with 2017a and above, python parts have been tested with 3.10.
+
 
 ### (1) Preprocessing raw audio  
 **Matlab functions.**  
@@ -18,8 +21,10 @@ The pipeline relies on the following great projects:
 
 ### (2) Noise reduction  
 **Python using [noisereduce](https://github.com/timsainb/noisereduce)**  
-Recordings were often sensitive enough to pick up not only speech from the participant wearing the microphone but also the other participant's speech streamed from the other lab and played from a speaker (crosstalk).  
-The noise reduction step aims to eliminate both crosstalk and the oocasional line noise. Could be an optional step depending on the amount of crosstalk but has been used so far for all COmmGame audio analysis.  
-Wrapper for calling noise reduction (with potentially multiple parameter combinations is “noise_reduce_wrapper.py” in the “rater_task” repo.
-Depends on noise clip data, which is specified by commgame_noiseclip.csv in data_disk/CommGame/
+
+   Recordings were often sensitive enough to pick up not only speech from the participant wearing the microphone but also the other participant's speech streamed from the other lab and played from a speaker (crosstalk).  
+The noise reduction step aims to eliminate both crosstalk and the oocasional line noise. Could be an optional step depending on the amount of crosstalk but has been used so far for all CommGame audio analysis.  
+1. A csv file (`commgame_noiseclips.csv`) contains the start and end times of a noise (crosstalk) segment within each freeConv recording. First a noise clip (wav) is cut from each freeConv, that is, one for each participant using `noiseclip_generator.py`. Sample call for pair 99: ```python noiseclip_generator.py 99 --csv_path CSV_PATH```
+2. 
+   
 Might require parameter finetuning depending on the amount of cross-talk in the recording. Aggressive noise reduction degrades intelligibility of target speech stream. Generally, stationary reduction is more promising than non-stationary, as the latter tends to strongly degrade the target stream as well. Baseline params: prop_decr: 1.0, n_std_thresh: 1.0, chunk_size: 16384, n_fft: 1024.
