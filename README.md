@@ -9,8 +9,17 @@ The pipeline relies on the following great projects:
 * [Silero Voice Activity Detector](https://github.com/snakers4/silero-vad)
 * [The BEA Speech Transcriber (BEAST2) model](https://phon.nytud.hu/bea/bea-base.html?lang=en)
 
-### (1) Preprocessing raw audio
+### (1) Preprocessing raw audio  
+**Matlab functions.**  
 1. Audio is checked for missing segments (buffer underflow events during streaming) and deviations from nominal sampling rate (which is a strangely common problem), with resampling where necessary. This procedure reconstructs the true timeline of the recorded audio as best as we can do it offline. 
 2. The above step is implemented in `audioRepair.m`, wrapped in `audioRepairWrapper.m` for batch processing. Sample call with our default parameters:
       ```audioRepair('/media/adamb/data_disk/CommGame/pair99', 99, 'freeConv', 0.020, 225, 0.5, 44100)```
 4. The outputs are two mono wav files containing the preprocessed audio streams from the two labs. They are trimmed to start at the `sharedStartTime` timestamp and to end when the shorter of the two finishes.
+
+### (2) Noise reduction  
+**Python using [noisereduce](https://github.com/timsainb/noisereduce)**
+Recordings were often sensitive enough to pick up not only speech from the participant wearing the microphone but also the other participant's speech streamed from the other lab and played from a speaker (crosstalk).  
+The noise reduction step aims to eliminate both crosstalk and the oocasional line noise. Could be an optional step depending on the amount of crosstalk but has been used so far for all COmmGame audio analysis.  
+Wrapper for calling noise reduction (with potentially multiple parameter combinations is “noise_reduce_wrapper.py” in the “rater_task” repo.
+Depends on noise clip data, which is specified by commgame_noiseclip.csv in data_disk/CommGame/
+Might require parameter finetuning depending on the amount of cross-talk in the recording. Aggressive noise reduction degrades intelligibility of target speech stream. Generally, stationary reduction is more promising than non-stationary, as the latter tends to strongly degrade the target stream as well. Baseline params: prop_decr: 1.0, n_std_thresh: 1.0, chunk_size: 16384, n_fft: 1024.
