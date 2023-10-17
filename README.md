@@ -11,14 +11,14 @@ The pipeline relies on the following great projects:
 * [Silero Voice Activity Detector](https://github.com/snakers4/silero-vad)
 * [The BEA Speech Transcriber (BEAST2) model](https://phon.nytud.hu/bea/bea-base.html?lang=en)
   
-The pipeline is prepared for Ubuntu 22.04 LTS as the target system. Matlab part has been tested with 2017a and above, python parts have been tested with 3.10.
+The pipeline is prepared for Ubuntu 22.04 LTS as the target system. Matlab part has been tested with 2017a and above, python parts have been tested with 3.10. In principle, Matlab functions should be easy to adapt to Octave but this has never been tested.
 
 
 ### (1) Preprocessing raw audio  
-**Matlab functions.**  
+**Matlab / Octave functions.**  
 - Audio is checked for missing segments (buffer underflow events during streaming) and deviations from nominal sampling rate (which is a strangely common problem), with resampling where necessary. This procedure reconstructs the true timeline of the recorded audio as best as we can do it offline. This above step is implemented in `audioRepair.m`, wrapped in `audioRepairWrapper.m` for batch processing. Sample call with our default parameters:
       ```audioRepair('/media/adamb/data_disk/CommGame/pair99', 99, 'freeConv', 0.020, 225, 0.5, 44100)```
-- The outputs are two mono wav files containing the preprocessed audio streams from the two labs. They are trimmed to start at the `sharedStartTime` timestamp and to end when the shorter of the two finishes. Standard output naming follows the convention:  
+- The outputs are two mono wav files containing the preprocessed audio streams from the two labs. They are trimmed to start at the `sharedStartTime` timestamp and to end when the shorter of the two finishes. Standard output naming follows this convention:  
 ```pairPAIRNUMBER_LABNAME_SESSION_repaired_mono.wav```, e.g. ```pair99_Mordor_freeConv_repaired_mono.wav```
 
 ### (2) Noise reduction  
@@ -30,4 +30,12 @@ The pipeline is prepared for Ubuntu 22.04 LTS as the target system. Matlab part 
 ```python noiseclip_generator.py 99 --csv_path CSV_PATH```
 - The generated noise clips are used for noise reduction across all audio files from the same speaker (all sessions). This part is handled by `noise_reduce_wrapper.py` which calls the `reduce_noise` method from the `nosiereduce` package repeatedly, for all audio files. We use the stationary method, with the parameters coded into `noise_red_params` within `noise_reduce_wrapper.py`. There are slightly different parameters defined for different levels of noise reduction. The csv file `commgame_noiseclips.csv` contains a rating regarding the degree of crosstalk for the recordings from each participant, `noise_reduce_wrapper` relies on this information for setting noise reduction parameters.
 Sample call for `noise_reduce_wrapper.py` for pairs 90 to 99:  
-```python noise_reduce_wrapper.py 90 99 --csv_path CSV_PATH``` 
+```python noise_reduce_wrapper.py 90 99 --csv_path CSV_PATH```  
+ - Standard output naming after noise reduction follows this convention:  
+```pairPAIRNUMBER_LABNAME_SESSION_repaired_mono_noisered.wav```, e.g. ```pair99_Mordor_freeConv_repaired_mono_noisered.wav```
+
+### (3) RMS-based filtering
+**Python using librosa, soundfile, matplotlib, numpy.**  
+Optional step, used whenever the output from noise reduction is deemed still too noisy for transcription. Very specific to our use case, where crosstalk is the biggest problem in terms of transcription, and where crosstalk is usually much softer than speech from the primary speaker.  
+The goal of this step is to differentiate the crosstalk from target speech based on power (RMS) and further reduce power for segments probably belonging to crosstalk towards a noise floor.  
+- Logic: per-frame RMS is estimated via STFT for all audio signals from the same participant. Log RMS values are depicted in a histogram and the user is prompted to provide two threshold values (a higher and a lower). Usually it is easy to spot the differences between primary speech signal, crosstalk, and line noise on the histogram. The higher threshold should correspond to a ~10% cumulative cutoff of the primary speech signal distribution (left tail), while the lower threshold should mark a ~60% cumulative cutoff for the crosstalk distribution (slightly right from the center). These are derived from practice and can vary form speaker-to-speaker for optimal results. Note that we rely on visual inspection because automatic detection (fitting) of a Gaussian mixture had poor reliability in our data.  
