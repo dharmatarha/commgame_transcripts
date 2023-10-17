@@ -16,7 +16,8 @@ The pipeline is prepared for Ubuntu 22.04 LTS as the target system. Matlab part 
 **Matlab functions.**  
 - Audio is checked for missing segments (buffer underflow events during streaming) and deviations from nominal sampling rate (which is a strangely common problem), with resampling where necessary. This procedure reconstructs the true timeline of the recorded audio as best as we can do it offline. This above step is implemented in `audioRepair.m`, wrapped in `audioRepairWrapper.m` for batch processing. Sample call with our default parameters:
       ```audioRepair('/media/adamb/data_disk/CommGame/pair99', 99, 'freeConv', 0.020, 225, 0.5, 44100)```
-- The outputs are two mono wav files containing the preprocessed audio streams from the two labs. They are trimmed to start at the `sharedStartTime` timestamp and to end when the shorter of the two finishes.
+- The outputs are two mono wav files containing the preprocessed audio streams from the two labs. They are trimmed to start at the `sharedStartTime` timestamp and to end when the shorter of the two finishes. Standard output naming follows the convention:  
+```pairPAIRNUMBER_LABNAME_SESSION_repaired_mono.wav```, e.g. ```pair99_Mordor_freeConv_repaired_mono.wav```
 
 ### (2) Noise reduction  
 **Python using [noisereduce](https://github.com/timsainb/noisereduce).**  
