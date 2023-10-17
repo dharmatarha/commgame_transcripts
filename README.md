@@ -14,15 +14,17 @@ The pipeline is prepared for Ubuntu 22.04 LTS as the target system. Matlab part 
 
 ### (1) Preprocessing raw audio  
 **Matlab functions.**  
-1. Audio is checked for missing segments (buffer underflow events during streaming) and deviations from nominal sampling rate (which is a strangely common problem), with resampling where necessary. This procedure reconstructs the true timeline of the recorded audio as best as we can do it offline. 
-2. The above step is implemented in `audioRepair.m`, wrapped in `audioRepairWrapper.m` for batch processing. Sample call with our default parameters:
+- Audio is checked for missing segments (buffer underflow events during streaming) and deviations from nominal sampling rate (which is a strangely common problem), with resampling where necessary. This procedure reconstructs the true timeline of the recorded audio as best as we can do it offline. This above step is implemented in `audioRepair.m`, wrapped in `audioRepairWrapper.m` for batch processing. Sample call with our default parameters:
       ```audioRepair('/media/adamb/data_disk/CommGame/pair99', 99, 'freeConv', 0.020, 225, 0.5, 44100)```
-4. The outputs are two mono wav files containing the preprocessed audio streams from the two labs. They are trimmed to start at the `sharedStartTime` timestamp and to end when the shorter of the two finishes.
+- The outputs are two mono wav files containing the preprocessed audio streams from the two labs. They are trimmed to start at the `sharedStartTime` timestamp and to end when the shorter of the two finishes.
 
 ### (2) Noise reduction  
 **Python using [noisereduce](https://github.com/timsainb/noisereduce)**  
 
    Recordings were often sensitive enough to pick up not only speech from the participant wearing the microphone but also the other participant's speech streamed from the other lab and played from a speaker (crosstalk).  
    The noise reduction step aims to eliminate both crosstalk and the occasional line noise. Could be an optional step depending on the amount of crosstalk but has been used for all CommGame audio analysis so far.  
-1. A csv file (`commgame_noiseclips.csv`) contains the start and end times of a noise (crosstalk) segment within each freeConv recording. First a noise clip (wav) is cut from each freeConv, that is, one for each participant using `noiseclip_generator.py`. Sample call for pair 99: ```python noiseclip_generator.py 99 --csv_path CSV_PATH```  
-2. Might require parameter finetuning depending on the amount of cross-talk in the recording. Aggressive noise reduction degrades intelligibility of target speech stream. Generally, stationary reduction is more promising than non-stationary, as the latter tends to strongly degrade the target stream as well. Baseline params: prop_decr: 1.0, n_std_thresh: 1.0, chunk_size: 16384, n_fft: 1024.
+- A csv file (`commgame_noiseclips.csv`) contains the start and end times of a noise (crosstalk) segment within each freeConv recording. First a noise clip (wav) is cut from each freeConv, that is, one for each participant using `noiseclip_generator.py`. Sample call for pair 99:
+- ```python noiseclip_generator.py 99 --csv_path CSV_PATH```
+- The generated noise clips are used for noise reduction across all audio files from the same speaker (all sessions). This part is handled by `noise_reduce_wrapper.py` which calls the `reduce_noise` method from the `nosiereduce` package repeatedly, for all audio files. We use the stationary method, with the parameters coded into `noise_red_params` within `noise_reduce_wrapper.py`. There are slightly different parameters defined for different levels of noise reduction. The csv file `commgame_noiseclips.csv` contains a rating regarding the degree of crosstalk for the recordings from each participant, `noise_reduce_wrapper` relies on this information for setting noise reduction parameters.
+Sample call for `noise_reduce_wrapper.py` for pairs 90 to 99:
+```python noise_reduce_wrapper.py 90 99 --csv_path CSV_PATH``` 
