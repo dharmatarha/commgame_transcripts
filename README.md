@@ -19,12 +19,12 @@ The pipeline is prepared for Ubuntu 22.04 LTS as the target system. Matlab part 
 - The outputs are two mono wav files containing the preprocessed audio streams from the two labs. They are trimmed to start at the `sharedStartTime` timestamp and to end when the shorter of the two finishes.
 
 ### (2) Noise reduction  
-**Python using [noisereduce](https://github.com/timsainb/noisereduce)**  
+**Python using [noisereduce](https://github.com/timsainb/noisereduce).**  
 
    Recordings were often sensitive enough to pick up not only speech from the participant wearing the microphone but also the other participant's speech streamed from the other lab and played from a speaker (crosstalk).  
    The noise reduction step aims to eliminate both crosstalk and the occasional line noise. Could be an optional step depending on the amount of crosstalk but has been used for all CommGame audio analysis so far.  
-- A csv file (`commgame_noiseclips.csv`) contains the start and end times of a noise (crosstalk) segment within each freeConv recording. First a noise clip (wav) is cut from each freeConv, that is, one for each participant using `noiseclip_generator.py`. Sample call for pair 99:
-- ```python noiseclip_generator.py 99 --csv_path CSV_PATH```
+- A csv file (`commgame_noiseclips.csv`) contains the start and end times of a noise (crosstalk) segment within each freeConv recording. First a noise clip (wav) is cut from each freeConv, that is, one for each participant using `noiseclip_generator.py`. Sample call for pair 99:  
+```python noiseclip_generator.py 99 --csv_path CSV_PATH```
 - The generated noise clips are used for noise reduction across all audio files from the same speaker (all sessions). This part is handled by `noise_reduce_wrapper.py` which calls the `reduce_noise` method from the `nosiereduce` package repeatedly, for all audio files. We use the stationary method, with the parameters coded into `noise_red_params` within `noise_reduce_wrapper.py`. There are slightly different parameters defined for different levels of noise reduction. The csv file `commgame_noiseclips.csv` contains a rating regarding the degree of crosstalk for the recordings from each participant, `noise_reduce_wrapper` relies on this information for setting noise reduction parameters.
-Sample call for `noise_reduce_wrapper.py` for pairs 90 to 99:
+Sample call for `noise_reduce_wrapper.py` for pairs 90 to 99:  
 ```python noise_reduce_wrapper.py 90 99 --csv_path CSV_PATH``` 
