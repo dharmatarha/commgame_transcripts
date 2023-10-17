@@ -1,3 +1,7 @@
+"""
+
+"""
+
 import os
 import argparse
 import numpy as np
@@ -10,6 +14,17 @@ matplotlib.use('TkAgg')
 
 
 def find_speech_files(pair, lab, audio_dir):
+    """
+    Function to find relevant audio files for RMS-based filtering. Looks up the wav files that
+    underwent audio preprocessing and noise reduction (have the ending "*_repaired_mono_noisered.wav)
+    for a given participant (defined by pair number and lab name together, e.g. pair99_Mordor), for all sessions
+    (that is, for all BG games and for freeConv).
+
+    :param pair:        Int, pair number.
+    :param lab:         Str, lab name, one of ['Mordor', 'Gondor']
+    :param audio_dir:   Str, path to directory holding all audio files.
+    :return session_files: List, where each element is a path to a wav file.
+    """
     # Get BG files for pair and lab
     bg = 0
     session_files = []
@@ -35,12 +50,17 @@ def find_speech_files(pair, lab, audio_dir):
 
 def get_log_rms(session_files, ref_sampling_rate=44100, n_fft=2048, hop_length=1024):
     """
+    Function to calculate Root Mean Square (RMS) of the audio signals in the wav files supplied in session_files.
+    RMS is estimated from the STFT (using librosa). Both the RMS values and the indices of frames are returned in
+    numpy arrays, collected into lists.
 
-    :param session_files:
-    :param ref_sampling_rate:
-    :param n_fft:
-    :param hop_length:
-    :return:
+    :param session_files:       List, each element is a path to a wav file (usually output of find_speech_files).
+    :param ref_sampling_rate:   Int, expected (reference) sampling rate for wav files.
+    :param n_fft:               Int, passed on to the "n_fft" input argument of librosa.stft.
+    :param hop_length:          Int, passed on to the "hop_length" input argument of librosa.stft.
+    :return log_rms_list:       List, where each element is a numpy array of log10 RMS values (RMS value per frame).
+    :return samples_list:       List, where each element is 2D numpy array with shape (2, NUMBER_OF_FRAMES).
+                                Each column holds the start and end indices for the corresponding frame.
     """
     # Output var
     log_rms_list = []
@@ -69,9 +89,11 @@ def get_log_rms(session_files, ref_sampling_rate=44100, n_fft=2048, hop_length=1
 
 def plot_rms_hist(rms):
     """
+    Function to draw a simple histogram of log10 RMS values from a list of log10 RMS value arrays.
+    Arrays are first stacked together, then matplotlib pyplot hist is called.
 
-    :param rms: List, with numpy arrays for elements
-    :return:
+    :param rms:  List, where each element is a numpy array of log10 RMS values (usually the output from get_log_rms).
+    :return fig: Matplotlib figure handle.
     """
     # Stack all numpy arrays into a vector
     data = np.array([])
@@ -86,7 +108,12 @@ def plot_rms_hist(rms):
 
 
 def get_thresh_input(figure):
-
+    """
+    Get input for log10 RMS threshold values after drawing the histogram with plot.rms_hist.
+    :param figure:          Matplotlib figure handle.
+    :return threshold_high: Numeric value, log10 RMS value, answer to the prompt for higher threshold.
+    :return threshold_low:  Numeric value, log10 RMS value, answer to the prompt for lower threshold.
+    """
     threshold_high = input('\nWhat should be the higher threshold for noise? (in log10 values)\n')
     threshold_high = float(threshold_high)
     plt.pause(1)
@@ -100,6 +127,7 @@ def get_thresh_input(figure):
 def clean_signal(session_path, session_rms_log, session_sample_bounds, rms_threshold_log,
                  min_length_s=0.25, ref_sampling_rate=44100, dampening_factor=0.0001):
     """
+    !!!  NOT USED BUT LEFT HERE IN CASE WE REVERT TO IT  !!!
 
     :param session_path:
     :param session_rms_log:
