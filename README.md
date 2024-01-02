@@ -41,14 +41,16 @@ Sample call for `noise_reduce_wrapper.py` for pairs 90 to 99:
 Optional step, used whenever the output from noise reduction is deemed still too noisy for transcription. Very specific to our use case where crosstalk is the biggest problem in terms of transcription, and where crosstalk is usually much softer than speech from the primary speaker.  
 The goal of this step is to differentiate the crosstalk from target speech based on power (RMS) and further reduce power for segments probably belonging to crosstalk towards a noise floor.  
 - **Overlook**:
-  1. Per-frame RMS is estimated via STFT for all audio signals from the same participant (default frame length is 2048 samples, with 50 % overlap).
-  2. Log RMS values are depicted in a histogram and the user is prompted to provide two threshold values (a higher and a lower). Usually it is easy to spot the differences between primary speech signal, crosstalk, and line noise on the histogram. The higher threshold should correspond to a ~10% cumulative cutoff of the primary speech signal distribution (left tail), while the lower threshold should mark a ~60% cumulative cutoff for the crosstalk distribution (slightly right from the center). These are derived from practice and can vary form speaker-to-speaker for optimal results. Note that we rely on visual inspection because automatic detection (fitting) of a Gaussian mixture had poor reliability in our data.
-  3. The RMS time-series is windowed (default window length is 11 frames, with 50 % (rounded down) overlap), and each window is characterized by its mean RMS.
-  4. Mean RMS values between the lower and higher cutoffs are assigned weights between 10<sup>0</sup> and 10<sup>-4</sup> (default values), linearly, with all values below the lower cutoff getting assigned the minimum, and all values above the higher cutoff getting assigned the maximum weight.
-  5. Weights are expanded to the size of the input signal and median filtered (default filter length: 1999).
-  6. Signal is piecewise multiplied with weight vector.
-  7. Gaussian noise is added to the signal to mask low-RMS segments from voice detection (default sigma: 10<sup>-3</sup>)
+  - Per-frame RMS is estimated via STFT for all audio signals from the same participant (default frame length is 2048 samples, with 50 % overlap).
+  - Log RMS values are depicted in a histogram and the user is prompted to provide two threshold values (a higher and a lower). Usually it is easy to spot the differences between primary speech signal, crosstalk, and line noise on the histogram. The higher threshold should correspond to a ~10% cumulative cutoff of the primary speech signal distribution (left tail), while the lower threshold should mark a ~60% cumulative cutoff for the crosstalk distribution (slightly right from the center). These are derived from practice and can vary form speaker-to-speaker for optimal results. Note that we rely on visual inspection because automatic detection (fitting) of a Gaussian mixture had poor reliability in our data.
+  - The RMS time-series is windowed (default window length is 11 frames, with 50 % (rounded down) overlap), and each window is characterized by its mean RMS.
+  - Mean RMS values between the lower and higher cutoffs are assigned weights between 10<sup>0</sup> and 10<sup>-4</sup> (default values), linearly, with all values below the lower cutoff getting assigned the minimum, and all values above the higher cutoff getting assigned the maximum weight.
+  - Weights are expanded to the size of the input signal and median filtered (default filter length: 1999).
+  - Signal is piecewise multiplied with weight vector.
+  - Gaussian noise is added to the signal to mask low-RMS segments from voice detection (default sigma: 10<sup>-3</sup>)
 - To change the filter just swap the ```rms_weighting_filter``` function with your own.
+- The script expects speech audio files (wavs) following the naming convention of the noise reduction step (```pairPAIRNUMBER_LABNAME_SESSION_repaired_mono_noisered.wav``` ) in some folder. Sample call for `speech_rms_filtering.py` for pair 99, in lab Mordor:  
+```python speech_rms_filtering 99 Mordor --audio_dir AUDIO_DIR```
 - Standard output naming after RMS-based filtering follows this convention:  
 ```pairPAIRNUMBER_LABNAME_SESSION_repaired_mono_noisered_filtered.wav```  
 (e.g. ```pair99_Mordor_freeConv_repaired_mono_noisered_filtered.wav```)
