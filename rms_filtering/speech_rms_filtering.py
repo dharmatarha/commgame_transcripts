@@ -195,7 +195,7 @@ def rms_weighting_filter(session_path, session_rms_log, session_sample_bounds, r
                          rms_threshold_low, ref_sampling_rate=44100, max_log_weight=0, min_log_weight=-4,
                          win_length=11, noise_sigma=0.001, medfilt_size=999):
     """
-
+    
     :param session_path:
     :param session_rms_log:
     :param session_sample_bounds:
@@ -245,7 +245,7 @@ def rms_weighting_filter(session_path, session_rms_log, session_sample_bounds, r
 
     # Apply median filter to array, to avoid cracking at sharp changes
     if medfilt_size:
-        signal_filter = medfilt(signal_filter, kernel_size=399)
+        signal_filter = medfilt(signal_filter, kernel_size=medfilt_size)
 
     # Apply filter
     filtered_signal = np.multiply(signal, signal_filter)
