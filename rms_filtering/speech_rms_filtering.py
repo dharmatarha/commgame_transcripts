@@ -1,4 +1,17 @@
 """
+RMS-based filtering on audio signals. Hardcoded params in main()
+
+USAGE:
+python speech_rms_filtering PAIRNUMBER LABNAME --audio_dir AUDIO_DIR
+
+Expects audio files with the naming convention
+"pairPAIRNUMBER_LABNAME_SESSION_repaired_mono_noisered.wav"
+(e.g. pair99_Mordor_freeConv_repaired_mono_noisered.wav) in the folder AUDIO_DIR.
+
+Output are wav files saved into AUDIO_DIR, with naming convention:
+"pairPAIRNUMBER_LABNAME_SESSION_repaired_mono_noisered_filtered.wav"
+(e.g. pair99_Mordor_freeConv_repaired_mono_noisered_filtered.wav)
+
 
 """
 
@@ -195,18 +208,31 @@ def rms_weighting_filter(session_path, session_rms_log, session_sample_bounds, r
                          rms_threshold_low, ref_sampling_rate=44100, max_log_weight=0, min_log_weight=-4,
                          win_length=11, noise_sigma=0.001, medfilt_size=999):
     """
+    RMS-based filtering function. Calls functions windowed_weigthing and weighting_fun.
+    It maps the mean RMS values of the windowed signal which fall between the speficied thresholds / cutoffs to 
+    the weights between the specified maximum and minimum values proportionally, then multiplies the signal with
+    the weight vector. RMS values above / below the maximum / minimum thresholds are assigned the maximum / minimum weights.
+    Gaussian noise is added to mask low-RMS signal segments.
     
-    :param session_path:
-    :param session_rms_log:
-    :param session_sample_bounds:
-    :param rms_threshold_high:
-    :param rms_threshold_low:
-    :param ref_sampling_rate:
-    :param max_log_weight:
-    :param min_log_weight:
-    :param win_length:
-    :param noise_sigma:
-    :return:
+    
+    :param session_path:	   Path to session file (audio)
+    :param session_rms_log:	   Numpy array of log10 RMS values, usually from get_log_rms output,
+    				   corresponding to session file.	
+    :param session_sample_bounds: 2D numpy array with shape (2, NUMBER_OF_FRAMES). Each column holds
+    				   the start and end indices for the corresponding frame. Usually from
+    				   get_log_rms output, corresponding to session_rms_log.
+    :param rms_threshold_high:    Numeric value, higher RMS cutoff (in log10 scale).
+    :param rms_threshold_low:	   Numeric value, lower RMS cutoff (in log10 scale).
+    :param ref_sampling_rate:     Numeric value, expected sampling rate of audio signal in session_path.
+    :param max_log_weight:	   Numeric value, maximum weight in powers of 10.
+    :param min_log_weight:	   Numeric value, minimum weight in powers of 10.
+    :param win_length:		   Numeric value, window length (frames).
+    :param noise_sigma:           Numeric value, sigma of Gaussian noise added to the signal after
+    				   applying the weights.
+    				   
+    :return: filtered_signal:     RMS-filtered audio signal in numpy array, same size as signal in session_path.
+    :return: signal_filter:       Numpy array applied to the audio signal is session_path (piecewise multiplication).
+    :return: rms_weights:	   Numpy array, the weights assidned to each frame.
     """
 
     # If "session_rms_log" is a 2D array, turn it into a 1D array. Raise error for other dims.
@@ -292,13 +318,13 @@ def weighting_fun(x_arr, x_max, x_min, y_max, y_min):
     (1) Values in window (x_arr) are averaged.
     (2) Weight is a linear function of the window average, but is constant above and below pre-specified values.
     The linear function determines the relative position of the window avg in a pre-specified range (x_max and x_min),
-    and projects it into a specified range of weights (determined by y_may and y_min).
-    :param x_arr:
-    :param x_max:
-    :param x_min:
-    :param y_max:
-    :param y_min:
-    :return:
+    and projects it into a specified range of weights (determined by y_may and y_min) (simple linear mapping within specified range).
+    :param x_arr:  Numpy array holding signal.
+    :param x_max:  Higher cutoff, above which the maximum weight is applied (log10 scale).
+    :param x_min:  Lower cutoff, below which the minimum weight is applied (log10 scale).
+    :param y_max:  Maximum weight (log10 scale).
+    :param y_min:  Minimum weight (log10 scale).
+    :return: weight: Weight to be applied to signal.
     """
     x_arr_mean = np.mean(x_arr)
     x_ratio = (x_arr_mean - x_min) / (x_max - x_min)
