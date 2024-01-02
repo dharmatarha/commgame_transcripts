@@ -48,4 +48,7 @@ The goal of this step is to differentiate the crosstalk from target speech based
   5. Weights are expanded to the size of the input signal and median filtered (default filter length: 1999).
   6. Signal is piecewise multiplied with weight vector.
   7. Gaussian noise is added to the signal to mask low-RMS segments from voice detection (default sigma: 10<sup>-3</sup>)
-- To change the filter just swap ```rms_weighting_filter``` with your own.
+- To change the filter just swap the ```rms_weighting_filter``` function with your own.
+- Standard output naming after RMS-based filtering follows this convention:  
+```pairPAIRNUMBER_LABNAME_SESSION_repaired_mono_noisered_filtered.wav```  
+(e.g. ```pair99_Mordor_freeConv_repaired_mono_noisered_filtered.wav```)
