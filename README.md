@@ -41,9 +41,9 @@ Sample call for `noise_reduce_wrapper.py` for pairs 90 to 99:
 Optional step, used whenever the output from noise reduction is deemed still too noisy for transcription. Very specific to our use case where crosstalk is the biggest problem in terms of transcription, and where crosstalk is usually much softer than speech from the primary speaker.  
 The goal of this step is to differentiate the crosstalk from target speech based on power (RMS) and further reduce power for segments probably belonging to crosstalk towards a noise floor.  
 - **Overlook**:
-  - Per-frame RMS is estimated via STFT for all audio signals from the same participant (default frame length is 2048 samples, with 50 % overlap).
+  - Per-frame RMS is estimated via STFT for all audio signals from the same participant (default frame length is 2048 samples, with 50% overlap).
   - Log RMS values are depicted in a histogram and the user is prompted to provide two threshold values (a higher and a lower). Usually it is easy to spot the differences between primary speech signal, crosstalk, and line noise on the histogram. The higher threshold should correspond to a ~10% cumulative cutoff of the primary speech signal distribution (left tail), while the lower threshold should mark a ~60% cumulative cutoff for the crosstalk distribution (slightly right from the center). These are derived from practice and can vary form speaker-to-speaker for optimal results. Note that we rely on visual inspection because automatic detection (fitting) of a Gaussian mixture had poor reliability in our data.
-  - The RMS time-series is windowed (default window length is 11 frames, with 50 % (rounded down) overlap), and each window is characterized by its mean RMS.
+  - The RMS time-series is windowed (default window length is 11 frames, with 50% overlap rounded down), and each window is characterized by its mean RMS.
   - Mean RMS values between the lower and higher cutoffs are assigned weights between 10<sup>0</sup> and 10<sup>-4</sup> (default values), linearly, with all values below the lower cutoff getting assigned the minimum, and all values above the higher cutoff getting assigned the maximum weight.
   - Weights are expanded to the size of the input signal and median filtered (default filter length: 1999).
   - Signal is piecewise multiplied with weight vector.
@@ -54,3 +54,18 @@ The goal of this step is to differentiate the crosstalk from target speech based
 - Standard output naming after RMS-based filtering follows this convention:  
 ```pairPAIRNUMBER_LABNAME_SESSION_repaired_mono_noisered_filtered.wav```  
 (e.g. ```pair99_Mordor_freeConv_repaired_mono_noisered_filtered.wav```)
+
+### (4) Audio segmentation by Voice Activity Detector  
+**Python calling [Silero-VAD model](https://github.com/snakers4/silero-vad)**   
+- The selected transcription model (BEAST2) works best with short audio segments (<30 s) containing mainly speech and minimal silence. To achieve this, the noise-reduced (and filtered) audio is evaluated with the Silero-VAD model and sufficiently short speech segments are saved out as separate wav files. While the VAD model is run on the noise-reduced (and filtered) audio, segments are taken from the original ("raw") recordings as those generally yield better quality transcriptions. 
+- Data is expected in a specific folder structure. A general data folder should contain the subfolders "raw", "noise_reduced", and "asr". Raw audio files are expected under "/raw", noise-reduced (and, optionally, filtered) audio files under "/noise_reduced", and segmentation results are saved out into "/asr/pairPAIRNUMBER".      
+- Sample call for pairs 90 to 99, where DATA_FOLDER contains the necessary subfolders:  
+      ```python audio_transcription_preproc.py 90 99 --audio_dir DATA_FOLDER```  
+If the audio files have also been RMS-filtered, use the --use_filtered option:
+      ```python audio_transcription_preproc.py 90 99 --audio_dir DATA_FOLDER --use_filtered```  
+- The script prepares the data for ASR specifically with BEAST2. It generates the necessary json and yaml files with the right parameters and paths for batch processing, all under "/asr/pairPAIRNUMBER". A "base" yaml file is needed for these steps, currently with a hardcoded path in the script.
+- Hardcoded parameters are scattered in `main()`, in calls to `get_speech_timestamps()` and `get_audio_cut_points_only_speech()`.  
+- Current implementation is on CPU with only one thread, is still fast enough for our use case. 
+- The docstring of the script has a detailed description on the generated output files.
+
+
