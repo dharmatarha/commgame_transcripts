@@ -1,0 +1,175 @@
+# ############################################################################
+# Model: wav2vec2 + DNN + CTC + NLL
+# LM: Transformer w/ BeamSearch
+# Augmentation: SpecAugment
+# Tokens: unigram
+# ############################################################################
+
+
+# Language model (LM) pretraining
+# NB: To avoid mismatch, the speech recognizer must be trained with the same
+# tokenizer used for LM training.
+tokenizer_path: "models/tokenizer/"
+lm_path: "models/lm/model.ckpt"
+asr_path: "models/acoustic/model.ckpt"
+wav2vec_path: "models/acoustic/wav2vec2.ckpt"
+
+# Data files
+data_folder: "MISSING"
+test_json: "MISSING"
+
+output_folder: "output"
+save_folder: !ref <output_folder>/save
+wer_file: "MISSING"
+
+avoid_if_longer_than: 20.0
+avoid_if_shorter_than: 0.5
+
+# Dataloader options
+test_dataloader_opts:
+    batch_size: 1
+
+# Outputs
+output_neurons: 600
+blank_index: 0
+bos_index: 1
+eos_index: 2
+unk_index: 0
+pad_index: 0
+
+d_model: 1024
+sample_rate: 16000
+
+####################### LM model ###########################
+
+lm_model: !new:speechbrain.lobes.models.transformer.TransformerLM.TransformerLM # yamllint disable-line rule:line-length
+    vocab: !ref <output_neurons>
+    d_model: !ref <d_model>
+    nhead: 16
+    num_encoder_layers: 14
+    num_decoder_layers: 0
+    d_ffn: 3072
+    dropout: 0.0
+    activation: !name:torch.nn.GELU
+    normalize_before: False
+
+####################### ASR model ###########################
+
+activation: &id001 !name:torch.nn.LeakyReLU
+
+enc: &id003 !new:speechbrain.lobes.models.VanillaNN.VanillaNN
+  input_shape: [null, null, 1024]
+  activation: *id001
+  dnn_blocks: 2
+  dnn_neurons: 1024
+
+wav2vec2: &id002 !new:speechbrain.lobes.models.fairseq_wav2vec.FairseqWav2Vec2
+  pretrained_path:  https://dl.fbaipublicfiles.com/voxpopuli/models/wav2vec2_large_uralic_v2.pt
+  output_norm: true
+  freeze: true
+  save_path: "models/acoustic/w2v_vanilla.pt"
+
+emb: &id004 !new:speechbrain.nnet.embedding.Embedding
+  num_embeddings: 600
+  embedding_dim: 128
+
+dec: &id005 !new:speechbrain.nnet.RNN.AttentionalRNNDecoder
+  enc_dim: 1024
+  input_size: 128
+  rnn_type: gru
+  attn_type: location
+  hidden_size: 1024
+  attn_dim: 1024
+  num_layers: 1
+  scaling: 1.0
+  channels: 10
+  kernel_size: 100
+  re_init: true
+  dropout: 0.15
+
+ctc_lin: &id006 !new:speechbrain.nnet.linear.Linear
+  input_size: 1024
+  n_neurons: 600
+
+seq_lin: &id007 !new:speechbrain.nnet.linear.Linear
+  input_size: 1024
+  n_neurons: 600
+
+log_softmax: !new:speechbrain.nnet.activations.Softmax
+  apply_log: true
+
+ctc_cost: !name:speechbrain.nnet.losses.ctc_loss
+  blank_index: 0
+
+seq_cost: !name:speechbrain.nnet.losses.nll_loss
+  label_smoothing: 0.1
+
+asr_modules:
+  wav2vec2: *id002
+  enc: *id003
+  emb: *id004
+  dec: *id005
+  ctc_lin: *id006
+  seq_lin: *id007
+
+asr_model: &id008 !new:torch.nn.ModuleList
+- [*id003, *id004, *id005, *id006, *id007]
+
+# Decoding parameters
+min_decode_ratio: 0.0
+max_decode_ratio: 1.0
+test_beam_size: 8 # 84
+lm_weight: 0.285 # 0.25
+ctc_weight_decode: 0.014 # 0.02
+ctc_temp: 1.05
+lm_temp: 1.05
+using_max_attn_shift: true
+max_attn_shift: 325
+cov_penalty: 3.0
+eos_threshold: 2.5
+using_eos_threshold: true
+length_norm: true
+
+############################## Decoder ################################
+
+beam_searcher: !new:speechbrain.decoders.S2SRNNBeamSearchTransformerLM
+    embedding: *id004
+    decoder: *id005
+    linear: *id007
+    ctc_linear: *id006
+    language_model: !ref <lm_model>
+    bos_index: !ref <bos_index>
+    eos_index: !ref <eos_index>
+    blank_index: !ref <blank_index>
+    min_decode_ratio: !ref <min_decode_ratio>
+    max_decode_ratio: !ref <max_decode_ratio>
+    beam_size: !ref <test_beam_size>
+    ctc_weight: !ref <ctc_weight_decode>
+    lm_weight: !ref <lm_weight>
+    temperature: !ref <ctc_temp>
+    temperature_lm: !ref <lm_temp>
+    using_max_attn_shift: !ref <using_max_attn_shift>
+    max_attn_shift: !ref <max_attn_shift>
+    using_eos_threshold: !ref <using_eos_threshold>
+    eos_threshold: !ref <eos_threshold>
+    coverage_penalty: !ref <cov_penalty>
+    length_normalization: !ref <length_norm>
+
+
+error_rate_computer: !name:speechbrain.utils.metric_stats.ErrorRateStats
+cer_computer: !name:speechbrain.utils.metric_stats.ErrorRateStats
+  split_tokens: true
+
+
+# The pretrainer allows a mapping between pretrained files and instances that
+# are declared in the yaml.
+pretrainer: !new:speechbrain.utils.parameter_transfer.Pretrainer
+    collect_in: !ref <save_folder>
+    loadables:
+        lm: !ref <lm_model>
+        asr: !ref <asr_model>
+        w2v: !ref <wav2vec2>
+    paths:
+        lm: !ref <lm_path>
+        asr: !ref <asr_path>
+        w2v: !ref <wav2vec_path>
