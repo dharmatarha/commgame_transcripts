@@ -52,7 +52,7 @@ diary(logFile);
 
 %% Load BG games and freeConv info for pairs
 
-tmp = load('/home/adamb/PycharmProjects/rater_task/BGgames.mat');
+tmp = load('/home/adamb/commgame_transcripts/preproc/BGgames.mat');
 % check if we have BG info for the right pairs
 bgInfoPairs = tmp.pairList;
 if any(~ismember(pairList, bgInfoPairs))
@@ -65,7 +65,7 @@ bgValid = tmp.bgValid;
 bgValid = bgValid(i, :);
 
 % same for freeConv as for BG games
-tmp = load('/home/adamb/PycharmProjects/rater_task/freeConvValid.mat');
+tmp = load('/home/adamb/commgame_transcripts/preproc/freeConvValid.mat');
 freeConvInfoPairs = tmp.pairList;
 if any(~ismember(pairList, freeConvInfoPairs))
     error('Cannot find freeConv validity info for at least one requested pair!');
