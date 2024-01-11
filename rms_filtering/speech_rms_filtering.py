@@ -217,10 +217,10 @@ def rms_weighting_filter(session_path, session_rms_log, session_sample_bounds, r
     
     :param session_path:	   Path to session file (audio)
     :param session_rms_log:	   Numpy array of log10 RMS values, usually from get_log_rms output,
-    				   corresponding to session file.	
+                               corresponding to session file.
     :param session_sample_bounds: 2D numpy array with shape (2, NUMBER_OF_FRAMES). Each column holds
-    				   the start and end indices for the corresponding frame. Usually from
-    				   get_log_rms output, corresponding to session_rms_log.
+    				              the start and end indices for the corresponding frame. Usually from
+    				              get_log_rms output, corresponding to session_rms_log.
     :param rms_threshold_high:    Numeric value, higher RMS cutoff (in log10 scale).
     :param rms_threshold_low:	   Numeric value, lower RMS cutoff (in log10 scale).
     :param ref_sampling_rate:     Numeric value, expected sampling rate of audio signal in session_path.
@@ -228,7 +228,7 @@ def rms_weighting_filter(session_path, session_rms_log, session_sample_bounds, r
     :param min_log_weight:	   Numeric value, minimum weight in powers of 10.
     :param win_length:		   Numeric value, window length (frames).
     :param noise_sigma:           Numeric value, sigma of Gaussian noise added to the signal after
-    				   applying the weights.
+    				              applying the weights.
     				   
     :return: filtered_signal:     RMS-filtered audio signal in numpy array, same size as signal in session_path.
     :return: signal_filter:       Numpy array applied to the audio signal is session_path (piecewise multiplication).
