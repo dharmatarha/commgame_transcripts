@@ -7,6 +7,7 @@ Runs ASR on preprocessed / prepared audio.
 USAGE:
 python3 beast2_eval.py PAIR_NUMBERS --data_dir DATA_DIR_PATH
 
+All credit to Péter Mihajlik (mihajlik@tmit.bme.hu). Bugs are probably on us.
 """
 
 
