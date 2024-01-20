@@ -77,7 +77,8 @@ def generate_noiseclip(pair_number, lab_name, csv_df, data_dir='/media/adamb/dat
     :return: noise_wav_path: String, path to the noise .wav file saved out.
     """
     # Find relevant audio file for noise clip
-    pair_audio_pattern = '**/pair' + str(pair_number) + '_' + lab_name + '_freeConv_audio.wav'
+#    pair_audio_pattern = '**/pair' + str(pair_number) + '_' + lab_name + '_freeConv_repaired_mono.wav'  # to be used with *_repaired_mono.wav files
+    pair_audio_pattern = '**/pair' + str(pair_number) + '_' + lab_name + '_freeConv_audio.wav'  # to be used with *_audio.wav files
     audio_file = glob(os.path.join(data_dir, pair_audio_pattern), recursive=True)
     if not audio_file:
         raise FileNotFoundError('Could not find audio file for pattern ' + pair_audio_pattern)
@@ -90,11 +91,14 @@ def generate_noiseclip(pair_number, lab_name, csv_df, data_dir='/media/adamb/dat
     noise_end = csv_df.noise_end[row_mask].to_numpy()[0]
     # Cut out noise clip, transform to mono
     rate, data = wavfile.read(audio_file)
-    noiseclip = data[noise_start*rate+1: noise_end*rate, :]
-    noiseclip_mono = np.mean(noiseclip, axis=1)
-    noiseclip_mono = np.expand_dims(noiseclip_mono, axis=1)
+    noiseclip = data[noise_start * rate + 1: noise_end * rate, :]  # to be used with *_audio.wav files
+#    noiseclip = data[noise_start*rate+1: noise_end*rate]  # to be used with *_repaired_mono.wav files
+    noiseclip_mono = np.mean(noiseclip, axis=1)              # to be used with *_audio.wav files
+    noiseclip_mono = np.expand_dims(noiseclip_mono, axis=1)  # to be used with *_audio.wav files
+#    noiseclip_mono = np.expand_dims(noiseclip, axis=1)    # to be used with *_repaired_mono.wav files
     # Save out noise clip
-    noise_wav_path = os.path.join(os.path.split(audio_file)[0], os.path.basename(audio_file)[0: -18] + 'noise.wav')
+#    noise_wav_path = os.path.join(os.path.split(audio_file)[0], os.path.basename(audio_file)[0: -26] + 'noise.wav')  # to be used with *_repaired_mono.wav files
+    noise_wav_path = os.path.join(os.path.split(audio_file)[0], os.path.basename(audio_file)[0: -18] + 'noise.wav')  # to be used with *_audio.wav files
     noiseclip_mono = noiseclip_mono.astype('int16')  # needed for PCM 16bit wav format
     wavfile.write(noise_wav_path, rate, noiseclip_mono)
 
