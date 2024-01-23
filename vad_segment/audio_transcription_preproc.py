@@ -606,8 +606,10 @@ def define_yaml(base_yaml_path, file_dir, file_basename, asr_json_path):
 
 def main():
     # Input argument handling
-    # One mandatory and one optional argument, defining pair number(s) and the path to the audio (wav) files.
-    # Arg args.pair_numbers is a list with one or more elements while args.audio_dir is string (path to dir).
+    # One mandatory and two optional arguments, defining pair number(s), the path to the audio (wav) files, and setting
+    # the option for using RMS-filtered files for VAD.
+    # Arg args.pair_numbers is a list with one or more elements, args.audio_dir is string (path to dir), and
+    # args.use_filtered is boolean.
     parser = argparse.ArgumentParser()
     parser.add_argument('pair_numbers', type=int, nargs='+',
                         help='Pair numbers, determines which audio (wav) files are selected for analysis.'
