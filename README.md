@@ -1,4 +1,4 @@
-# Transcription generation pipeline for CommGame experiment audio data (Hungarian)
+# Transcription generation pipeline for CommGame experiment audio data (for Hungarian)
 
 A pipeline for automated transcription of somewhat noisy long audio recordings. Our use case is a series of cognitive / neuroscience experiments focusing on human verbal interactions (CommGame project).  
 
