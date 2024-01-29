@@ -1,5 +1,15 @@
 """
+Utility for generating new audio segments form manually fixed transcripts in the CommGame data set.
 
+USAGE:
+python srt_to_segments.py --data_dir DATA_DIR
+
+where DATA_DIR should point to the central data folder with the audio and transcription data, with subdirectories
+"asr", "raw", "noise_reduced", and "fixed".
+
+The script lists the fixed transcripts under "DATA_DIR/fixed" and segments the corresponding raw audio files according
+to the new srt file. These new audio segments are stored under
+"DATA_DIR/asr/pair[PAIRNO]/pair[PAIRNO]_[LAB]_[SESSION]_fixed_segmentation/"
 """
 
 import srt
@@ -7,19 +17,27 @@ import torchaudio
 import torch
 import os
 import numpy as np
-
-
-DATA_DIR = '/media/gandalf/data_hdd/audio_transcription/data/'
+import argparse
 
 
 def info_for_segmentation(data_dir):
     """
-    Get a list of tuples containing all necessary file / folder paths for re-segmenting audio according to
-    manually fixed srt files. Srt files are expected under data_dir/asr, raw audios under data_dir/raw.
-    :param data_dir:
-    :return:
+    Function to look through all ""data_dir/fixed" directories, and collect info about the manually fixed transcripts.
+    Specifically, for each manually fixed transcript, the function
+    (1) finds the corresponding raw audio file under "data_dir/raw",
+    (2) creates a directory for the new audio segments based on the fixed transcript under "data_dir/asr/pair_dir/",
+    (3) and determines the basename of each new audio segment file.
+
+    These are all returned in a list of tuples, where each tuple consists of the path of the manually fixed transcript
+    and the above three corresponding strings (raw audio file path, path to directory for new segments, and
+    segment basename).
+
+    :param data_dir: Path to data directory holding audio data and audio segments for transcripts. Must have subdirs
+                     "asr" and "raw"
+    :return: segmentation_list: List of tuples. See the docstring for the content of each tuple.
     """
-    to_segment_list = []
+
+    segmentation_list = []
 
     fixed_dir = os.path.join(data_dir, 'fixed')
     raw_dir = os.path.join(data_dir, 'raw')
@@ -70,12 +88,12 @@ def info_for_segmentation(data_dir):
                                          'repaired_mono_noisered_segment'])
 
                 # Store every relevant info in a tuple
-                to_segment_list.append((srt_path,
-                                        audio_path,
-                                        asr_session_dir,
-                                        segment_base))
+                segmentation_list.append((srt_path,
+                                          audio_path,
+                                          asr_session_dir,
+                                          segment_base))
 
-    return to_segment_list
+    return segmentation_list
 
 
 def srt_reader(srt_path):
@@ -150,6 +168,19 @@ def segment_from_srt(srt_path, audio_path, output_dir, segment_basename):
     return all_segment_paths
 
 
-to_segment_list = info_for_segmentation(DATA_DIR)
-for srt_p, audio_p, output_d, seg_base in to_segment_list:
-    all_segment_paths = segment_from_srt(srt_p, audio_p, output_d, seg_base)
+def main():
+    # Argument parsing
+    parser = argparse.ArgumentParser()
+    parser.add_argument('--data_dir',
+                        type=str, default='/media/gandalf/data_hdd/audio_transcription/data/', nargs='?',
+                        help='Path to directory holding the audio segments (short wav files), '
+                             'with subdirectories for each pair.')
+    args = parser.parse_args()
+
+    to_segment_list = info_for_segmentation(args.data_dir)
+    for srt_p, audio_p, output_d, seg_base in to_segment_list:
+        all_segment_paths = segment_from_srt(srt_p, audio_p, output_d, seg_base)
+
+
+if __name__ == '__main__':
+    main()
