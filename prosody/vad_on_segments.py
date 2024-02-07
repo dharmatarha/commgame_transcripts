@@ -10,8 +10,11 @@ import sys
 import pandas as pd
 import re
 import warnings
-from glob import glob
+import copy
 import srt
+import numpy as np
+from scipy import signal
+from glob import glob
 
 sys.path.append('/home/gandalf/beast2/')
 
@@ -21,7 +24,9 @@ from audio_transcription_preproc import wav_resample
 # Known cases of missing audio in data set.
 MISSING_AUDIO_DATA = [('pair100', 'BG4', 'Mordor'),
                       ('pair100', 'BG4', 'Gondor')]
-# Audio resampling rate in Hz, resampling to this frequency is required by the VAD model.
+# Audio resampling rate in Hz, resampling to this frequency is required by the VAD model. This is also the frequency
+# used earlier for e.g. the *_segmentation_samples.npz, the *_vad.json and other data files holding information
+# in terms of audio samples.
 RESAMPLING_RATE = 16000
 # Params for vad model call
 VAD_THRESHOLD = 0.90
@@ -29,10 +34,13 @@ VAD_MIN_SPEECH_DURATION_MS = 100
 VAD_MIN_SILENCE_DURATION_MS = 100
 VAD_WINDOW_SIZE_SAMPLES = 512
 VAD_SPEECH_PAD_MS = 30
-# Fix output name
-DATAFRAME_SAVEFILE = 'speech_segment_VAD_results.pkl'
+# Fix output names
+DATAFRAME_SAVEFILE_INTERIM = 'speech_segment_VAD_results.pkl'
+DATAFRAME_SAVEFILE_FINAL = 'speech_segment_results_all.pkl'
 # Minimum audio length to consider for VAD
 MIN_AUDIO_LENGTH_S = 0.05
+# Target sampling rate for speech timeseries, in Hz
+TIMESERIES_SAMPLING_RATE = 200
 
 
 def find_audio(pair_number, data_dir, use_fixed=False):
@@ -146,6 +154,46 @@ def srt_reader(srt_path):
     return start_times, end_times, content
 
 
+def digits_from_string_ends(str_list, max_d=3):
+    """
+    Helper to strip digits from the last "max_d" characters of strings. Strings are supplied in a list.
+    Returns a list of stripped digits, as integers.
+    :param str_list: List of strings
+    :param max_d:    Int, the number of last characters to search for digits. Defaults to 3.
+    :return: end_digits: List of integers.
+
+    >> a = ['abc1', 'dfg11', 'htk']
+    >> digits_from_string_ends(a, 2)
+    [1, 11, None]
+    """
+    end_digits_str = [re.sub('[^0-9]', '', current_str[-max_d:]) for current_str in str_list]
+    end_digits_int = [None if d == '' else int(d) for d in end_digits_str]
+    return end_digits_int
+
+
+def reorder_segments(df):
+    """
+    Helper function that sorts the lists in the "segments" column of the dataframe according to the numbers at
+    the ends of file paths stored in each list. This ordering is also used to reorder the lists in the
+    "speech_timestamps" column. The rest of the dataframe is left alone.
+
+    :param df:          Pandas dataframe with columns "segments" and "speech_timestamps, each holding lists.
+    :return: df_reord:  Same pandas dataframe as "df" but with the lists in "segments" and "speech_timestamps" reordered
+                        according to the numbering of files in the "segments" lists.
+    """
+    df_reord = copy.deepcopy(df)
+
+    for row_idx in df.index:
+        sequence = digits_from_string_ends(df_reord.loc[row_idx, 'segments'])
+        seq_sorted, segments_sorted, timestamps_sorted = zip(*sorted(zip(sequence,
+                                                                         df_reord.loc[row_idx, 'segments'],
+                                                                         df_reord.loc[row_idx, 'speech_timestamps'])))
+        df_reord.at[row_idx, 'segments'] = list(segments_sorted)
+        df_reord.at[row_idx, 'speech_timestamps'] = list(timestamps_sorted)
+
+    return df_reord
+
+
 def srt_timestamps_to_df(df, data_dir):
     """
     Function to find and load transcription files for each session, and extract speech-timing-related information.
@@ -154,11 +202,11 @@ def srt_timestamps_to_df(df, data_dir):
                      session-specific recording. With columns "pair", "session", "lab", "fixed", "segments", etc.
     :param data_dir: Path to folder holding all transcription-related data, with subdirs "asr" and "fixed".
                      Srt files are expected to be in these subdirs.
-    :return: df_srt: Pandas dataframe. Same as input df, but with added columns "srt_path and
-                              "srt_segment_info".
+    :return: df_srt: Pandas dataframe. Same as input df, but with added columns "srt_path" and
+                     "srt_segment_info".
     """
 
-    df_srt = df.copy()
+    df_srt = pd.DataFrame(columns=df.columns, data=copy.deepcopy(df.values))
 
     df_srt['srt_path'] = pd.Series(dtype=str)
     df_srt['srt_segment_info'] = pd.Series(dtype=object)
@@ -196,6 +244,134 @@ def srt_timestamps_to_df(df, data_dir):
         df_srt.at[row[0], 'srt_segment_info'] = srt_segment_info
 
     return df_srt
+
+
+def segment_ends_to_df(df):
+    """
+    Function to append the pandas dataframe with the segment timing information from the *_segmentation_samples.npz
+    files.
+    For each row (audio recording) in the dataframe where the transcription (srt) has not been fixed yet manually
+    (that is, the "fixed" var is False), the corresponding *_segmentation_samples.npz is loaded and the start and end
+    timestamps of the original segments is added to the dataframe, in a new column "segment_times".
+    The value in "segment_times" is a list of dicts, where each dict has keys "start", "end", and "duration", and the
+    corresponding values are in seconds.
+
+    :param df:       Pandas dataframe with columns "segments_dir", "fixed", "pair", "lab", and "session".
+    :return: df_seg: Pandas dataframe, same as "df" but with new column "segment_times".
+    """
+    df_seg = pd.DataFrame(columns=df.columns, data=copy.deepcopy(df.values))
+    df_seg.loc[:, 'segment_times'] = None
+    for row_idx in df_seg.index:
+        # Segmentation endpoints are only useful for not-yet-fixed segmentations / subtitles
+        if not df_seg.loc[row_idx, 'fixed']:
+            # Segmentation endpoints are stored in an .npz file with fix path and naming
+            seg_npz_path = os.path.join(df_seg.loc[row_idx, 'segments_dir'],
+                                        '_'.join([os.path.split(df_seg.loc[row_idx, 'segments_dir'])[1],
+                                                  'segmentation_samples.npz'])
+                                        )
+            # Load npz, extract audio samples, transform into timestamps
+            seg_ends = np.load(seg_npz_path)
+            starts = seg_ends['segment_starts'] / RESAMPLING_RATE
+            ends = seg_ends['segment_ends'] / RESAMPLING_RATE
+            durations = ends - starts
+            # For each segment, store the timestamps and duration info in a dictionary, store these in a list.
+            segment_times = [{'start': z[0], 'end': z[1], 'duration': z[2]} for z in zip(starts, ends, durations)]
+            # Store the list in the dataframe.
+            df_seg.at[row_idx, 'segment_times'] = segment_times
+
+    return df_seg
+
+
+def compare_segment_times_w_srt(df, tolerance_s=0.1):
+    """
+    Helper function that compares the content of columns "segment_times" and "srt_segment_info" in the pandas dataframe.
+    Discrepancies are printed to the terminal.
+
+    :param df:           Pandas dataframe.
+    :param tolerance_s:  Numeric value, tolerance for comparing corresponding segment start and ending timestamps, in
+                         seconds. Defaults to 0.1.
+    :return: -
+    """
+    df_comp = pd.DataFrame(columns=df.columns, data=copy.deepcopy(df.values))
+
+    for row_idx in df_comp.index:
+        if not df_comp.loc[row_idx, 'fixed']:
+
+            segment_times = df_comp.loc[row_idx, 'segment_times']
+            srt_times = df_comp.loc[row_idx, 'srt_segment_info']
+
+            for segment_idx, segment_current in enumerate(segment_times):
+                if np.abs(segment_current['start'] - srt_times[segment_idx]['start']) > tolerance_s or \
+                   np.abs(segment_current['end'] - srt_times[segment_idx]['end']) > tolerance_s:
+
+                    srt_times.insert(segment_idx, {'start': segment_current['start'],
+                                                   'end': segment_current['end'],
+                                                   'content': ''})
+                    print('Row ' + str(row_idx) + ': Inserted a dictionary with empty content into the ' +
+                          'srt_segment_info list at index ' + str(segment_idx))
+
+    return df_comp
+
+
+def speech_timeseries(df, sampling_rate=None):
+    """
+    Helper function to generate speech time series for each set of segment speech timestamps in the input dataframe.
+    Input pandas dataframe must have columns "speech_timestamps" and "srt_segment_info". Output is stored in new column
+    "speech_timeseries", as a numpy array.
+
+    :param df:            Pandas dataframe.
+    :param sampling_rate: Integer, target sampling rate for downsampling the speech timeseries numpy array, in Hz.
+                          Defaults to None, that is, the original sampling rate of RESAMPLING RATE used at the VAD
+                          step is preserved.
+    :return: df_ts: Pandas dataframe with the extra column "speech_timeseries" which holds a binary numpy array
+                    marking speech as a time series.
+    """
+    df_ts = pd.DataFrame(columns=df.columns, data=copy.deepcopy(df.values))
+    df_ts.loc[:, 'speech_timeseries'] = None
+
+    # Loop through each row in dataframe / each audio recording
+    for row_idx in df_ts.index:
+
+        # Extract the two relevant variables, both of which is a list of dictionaries.
+        srt_info = df_ts.loc[row_idx, 'srt_segment_info']
+        vad_info = df_ts.loc[row_idx, 'speech_timestamps']
+        # Sanity check - they should have the same length
+        assert len(srt_info) == len(vad_info), 'Different length of srt-based and vad-based timing lists!'
+
+        # Get the length of the timeseries from the last element in srt_info, round it to larger integer second.
+        samples_no = np.ceil(srt_info[-1]['end']) * RESAMPLING_RATE
+        # Initialize numpy array of zeros of length samples_no.
+        speech_ts = np.zeros([int(samples_no)])
+
+        # Loop through each dictionary in vad_info and srt_info, and fill the zero-array with ones where
+        # speech was detected.
+        for srt_idx in range(len(vad_info)):
+            # Segments in srt define the wider range within which the VAD model tried to detect exact
+            # boundaries of speech.
+            srt_range_in_samples = (np.asarray([srt_info[srt_idx]['start'],
+                                                srt_info[srt_idx]['end']]) * RESAMPLING_RATE).astype(int)
+            # Given the srt-defined segment, go through the VAD-detected, potentially shorted speech segments within.
+            if vad_info[srt_idx]:
+                for vad_dict in vad_info[srt_idx]:
+                    speech_range_in_samples = [vad_dict['start'] + srt_range_in_samples[0],
+                                               vad_dict['end'] + srt_range_in_samples[0]]
+                    # Set the timeseries to ones where there was speech.
+                    speech_ts[speech_range_in_samples[0]: speech_range_in_samples[1]] = 1
+
+        # The timeseries array can be downsampled if the sampling_rate argument was provided.
+        if sampling_rate:
+            assert sampling_rate < RESAMPLING_RATE, 'Requested sampling rate is higher than original!!!'
+            assert (RESAMPLING_RATE/sampling_rate) % 1 == 0, 'The ratio of requested and original sampling rate is not integer!!!'
+            speech_ts_downsamp = signal.decimate(speech_ts, int(RESAMPLING_RATE/sampling_rate), ftype='fir')
+            # Turn it back into binary integer array
+            speech_ts_downsamp[speech_ts_downsamp < 0.5] = 0
+            speech_ts_downsamp[speech_ts_downsamp > 0.5] = 1
+            speech_ts = speech_ts_downsamp.astype(int)
+
+        # Store timeseries in dataframe
+        df_ts.at[row_idx, 'speech_timeseries'] = speech_ts
+
+    return df_ts
 
 
 def main():
@@ -246,6 +422,12 @@ def main():
     # Loop through the rows of the dataframe, query the list of audio segments
     print('\nApplying VAD model to each speech segment, storing the results in dataframe...')
     for df_row_idx in df.index:
+
+        # User feedback.
+        if df_row_idx % 10 == 0:
+            print('\nWorking on row ' + str(df_row_idx))
+
+        # Select relevant variables from dataframe.
         row_audio_segments = df.loc[df_row_idx, 'segments']  # list
         row_segments_dir = df.loc[df_row_idx, 'segments_dir']  # path to dir with segment files
 
@@ -277,11 +459,28 @@ def main():
         df.at[df_row_idx, 'speech_timestamps'] = speech_timestamps
     print('\nFinished with querying speech timestamps.')
 
+    # Reorder the "segments" and "speech_timestamps" columns according to the sequence numbers in the segment filenames.
+    df = reorder_segments(df)
+
     # Get speech segment information from srt files.
     df_srt = srt_timestamps_to_df(df, args.audio_dir)
 
-    df_srt.to_pickle(os.path.join(args.audio_dir, DATAFRAME_SAVEFILE))
-    print('Saved dataframe to', os.path.join(args.audio_dir, DATAFRAME_SAVEFILE))
+    # Add segment timing info for rows where the transcriptions have not yet been manually "fixed".
+    df_seg = segment_ends_to_df(df_srt)
+
+    # Repair mismatches between srt_segment_info lists and segment_times lists. That is, when some segments
+    # generated no speech content in the srt.
+    df_comp = compare_segment_times_w_srt(df_seg, tolerance_s=0.1)
+
+    # Interim save, just to be sure
+    df_comp.to_pickle(os.path.join(args.audio_dir, DATAFRAME_SAVEFILE_INTERIM))
+    print('Saved dataframe to', os.path.join(args.audio_dir, DATAFRAME_SAVEFILE_INTERIM))
+
+    # Get timeseries data for each row of the dataframe
+    df_ts = speech_timeseries(df_comp, sampling_rate=TIMESERIES_SAMPLING_RATE)
+
+    df_ts.to_pickle(os.path.join(args.audio_dir, DATAFRAME_SAVEFILE_FINAL))
+    print('Saved dataframe to', os.path.join(args.audio_dir, DATAFRAME_SAVEFILE_FINAL))
 
 
 if __name__ == '__main__':
