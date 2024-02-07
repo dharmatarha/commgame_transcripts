@@ -9,6 +9,7 @@ import os
 import copy
 import argparse
 import pickle
+import re
 
 
 RESAMPLING_RATE = 16000
@@ -23,6 +24,75 @@ INPUT_PICKLE_FILENAME = 'speech_segment_results_all.pkl'  # Final output of vad_
 PITCH_INTENSITY_PICKLE_FILENAME = 'prosody_timeseries_df.pkl'
 INTENSITY_PKL_FILENAME = 'intensity_timeseries.pkl'
 PITCH_PKL_FILENAME = 'pitch_timeseries.pkl'
+PITCH_INTENSITY_SPEECHVARS_PICKLE_FILENAME = 'prosody_w_speech_df.pkl'
+
+
+def add_speech_vars_to_df(df):
+    """
+    Helper function to derive a number of summary variables related to the amount of speech and to speech rate, and to
+    add them to the input pandas dataframe.
+
+    Variables calculated for each row (session audio):
+    - Time spent speaking. Both the absolute value (s) and relative to the length of the recording (%).
+    - Amount of speech, in terms of syllables spoken. Absolute value.
+    - Speech rate, estimated from number of syllables.
+    - Time spent in silence, inverse of time spent speaking, again, both absolute (s) and relative amount (%).
+
+    :param df:           Pandas dataframe with columns "pitch", "srt_segment_info", and "speech_timeseries".
+    :return: df_speech:  Same pandas dataframe as input, but with added vars / columns "speech_time_abs",
+                         "speech_time_rel", "sil_time_abs", "sil_time_rel", "speech_syl", and "speech_rate_syl".
+    """
+
+    # Deep copy input dataframe, so we do not break it if stg goes wrong.
+    df_speech = pd.DataFrame(columns=df.columns, data=copy.deepcopy(df.values))
+
+    # Init new vars / columns
+    df_speech.loc[:, 'speech_time_abs'] = None
+    df_speech.loc[:, 'speech_time_rel'] = None
+    df_speech.loc[:, 'sil_time_abs'] = None
+    df_speech.loc[:, 'sil_time_rel'] = None
+    df_speech.loc[:, 'speech_syl'] = None
+    df_speech.loc[:, 'speech_rate_syl'] = None
+
+    # Loop through dataframe rows (session audios)
+    for row_idx in df.index:
+
+        # User feedback on progress
+        if row_idx % 10 == 0:
+            print('\nWorking on row ' + str(row_idx))
+
+        # Reference necessary variables for ease of use.
+        speech_ts = df_speech.loc[row_idx, 'speech_timeseries']  # speech_ts is binary
+        srt_segments = df_speech.loc[row_idx, 'srt_segment_info']  # list of dicts
+
+        # Get simple time-related measures.
+        total_time_s = len(speech_ts) / TIMESERIES_SAMPLING_RATE_HZ
+        df_speech.loc[row_idx, 'speech_time_abs'] = np.sum(speech_ts) / TIMESERIES_SAMPLING_RATE_HZ                 # s
+        df_speech.loc[row_idx, 'speech_time_rel'] = df_speech.loc[row_idx, 'speech_time_abs'] / total_time_s * 100  # %
+        df_speech.loc[row_idx, 'sil_time_abs'] = total_time_s - df_speech.loc[row_idx, 'speech_time_abs']           # s
+        df_speech.loc[row_idx, 'sil_time_rel'] = 1 - df_speech.loc[row_idx, 'speech_time_rel']                      # %
+
+        # Get total number of syllables
+        speech_segments = [seg_dict['content'] for seg_dict in srt_segments]  # List of strings
+        speech_syllables = get_syllables(speech_segments)[0]
+        df_speech.loc[:, 'speech_syl'] = speech_syllables                                                     # no
+        df_speech.loc[:, 'speech_rate_syl'] = speech_syllables / df_speech.loc[row_idx, 'speech_time_abs']    # syl/s
+
+    return df_speech
+
+
+def get_syllables(list_of_strings):
+    """
+    Helper function to extract the number of syllables from a list of strings.
+    STRICTLY FOR HUNGARIAN, where syllables can be reliably estimated from the number of vowels.
+    :param list_of_strings:   List of strings.
+    :return: syllables_total: Integer, total number of syllables across list elements.
+    :return: syllables:       List, with the number of syllables for each element in "list_of_strings" (integers).
+    """
+    vowels = [re.sub('[^aáeéiíoóöőüú]', '', s) for s in list_of_strings]
+    syllables = [len(s) for s in vowels]
+    syllables_total = sum(syllables)
+    return syllables_total, syllables
 
 
 def get_pitch_timeseries(df, timeseries_sr=TIMESERIES_SAMPLING_RATE_HZ):
@@ -281,6 +351,11 @@ def main():
     pitch_pkl_path = os.path.join(args.data_dir, PITCH_PKL_FILENAME)
     with open(pitch_pkl_path, 'wb') as pkl_out:
         pickle.dump([pitch_row_indices, pitch_timeseries], pkl_out)
+
+    # Get speech related aggregate variables for each row in dataframe.
+    df_speech = add_speech_vars_to_df(df_pitch_intensity)
+    pkl_with_speech_path = os.path.join(args.data_dir, PITCH_INTENSITY_SPEECHVARS_PICKLE_FILENAME)
+    df_speech.to_pickle(pkl_with_speech_path)
 
 
 if __name__ == '__main__':
