@@ -179,6 +179,7 @@ def main():
 
     to_segment_list = info_for_segmentation(args.data_dir)
     for srt_p, audio_p, output_d, seg_base in to_segment_list:
+        print('\nWorking on srt file at: ' + srt_p)
         all_segment_paths = segment_from_srt(srt_p, audio_p, output_d, seg_base)
 
 
