@@ -8,6 +8,7 @@ import numpy as np
 import os
 import copy
 import argparse
+import pickle
 
 
 RESAMPLING_RATE = 16000
@@ -20,8 +21,8 @@ MIN_SEGMENT_LENGTH_S = round(6.4/PM_MINIMUM_PITCH_HZ + 0.05, 1)
 TIMESERIES_SAMPLING_RATE_HZ = 200
 INPUT_PICKLE_FILENAME = 'speech_segment_results_all.pkl'  # Final output of vad_on_segments.py
 PITCH_INTENSITY_PICKLE_FILENAME = 'prosody_timeseries_df.pkl'
-INTENSITY_NPZ_FILENAME = 'intensity_timeseries.pkl'
-PITCH_NPZ_FILENAME = 'pitch_timeseries.pkl'
+INTENSITY_PKL_FILENAME = 'intensity_timeseries.pkl'
+PITCH_PKL_FILENAME = 'pitch_timeseries.pkl'
 
 
 def get_pitch_timeseries(df, timeseries_sr=TIMESERIES_SAMPLING_RATE_HZ):
@@ -271,14 +272,15 @@ def main():
 
     # Get intensity timeseries, save out resulting variables with pickle.
     intensity_row_indices, intensity_timeseries = get_intensity_timeseries(df_pitch_intensity)
-    intensity_pkl_path = os.path.join(args.data_dir, INTENSITY_NPZ_FILENAME)
+    intensity_pkl_path = os.path.join(args.data_dir, INTENSITY_PKL_FILENAME)
     with open(intensity_pkl_path, 'wb') as pkl_out:
-        pickle.dump(intensity_pkl_path, int_row_indices=intensity_row_indices, int_timeseries=intensity_timeseries)
+        pickle.dump([intensity_row_indices, intensity_timeseries], pkl_out)
 
     # Get pitch timeseries, save out resulting variables with pickle.
     pitch_row_indices, pitch_timeseries = get_pitch_timeseries(df_pitch_intensity)
-    pitch_pkl_path = os.path.join(args.data_dir, PITCH_NPZ_FILENAME)
-    np.savez_compressed(pitch_pkl_path, pitch_row_indices=pitch_row_indices, pitch_timeseries=pitch_timeseries)
+    pitch_pkl_path = os.path.join(args.data_dir, PITCH_PKL_FILENAME)
+    with open(pitch_pkl_path, 'wb') as pkl_out:
+        pickle.dump([pitch_row_indices, pitch_timeseries], pkl_out)
 
 
 if __name__ == '__main__':
