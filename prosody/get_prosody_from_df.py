@@ -169,7 +169,6 @@ def get_syllable_timeseries(df, timeseries_sr=TIMESERIES_SAMPLING_RATE_HZ):
     return row_indices, syl_timeseries
 
 
-
 def get_pitch_timeseries(df, timeseries_sr=TIMESERIES_SAMPLING_RATE_HZ):
     """
     Function to derive the pitch timeseries from the pitch data of each segment, for each audio (row) in the
@@ -312,8 +311,12 @@ def get_intensity_timeseries(df, timeseries_sr=TIMESERIES_SAMPLING_RATE_HZ):
             # Add back the interpolated segment-level intensity array to the overall intensity timeseries array
             intensity_ts[seg_starts_samples[seg_idx]: seg_ends_samples[seg_idx]] = seg_int_ts
 
-        # subtract lowest positive (nonzero) value
-        min_intensity = np.min(intensity_ts[np.nonzero(intensity_ts)])
+        # Clear occasional negative values (?).
+        intensity_ts[intensity_ts < 0] = 0
+
+        # Subtract lowest positive (nonzero) value as it corresponds to silence.
+        sorted_intensity = np.sort(intensity_ts[np.nonzero(intensity_ts)])
+        min_intensity = np.mean(sorted_intensity[:10])  # Estimate from 10 lowest values
         intensity_ts[np.nonzero(intensity_ts)] = intensity_ts[np.nonzero(intensity_ts)] - min_intensity
 
         # Store the row index and the final intensity timeseries in the output lists
