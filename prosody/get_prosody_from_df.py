@@ -24,6 +24,7 @@ INPUT_PICKLE_FILENAME = 'speech_segment_results_all.pkl'  # Final output of vad_
 PITCH_INTENSITY_PICKLE_FILENAME = 'prosody_timeseries_df.pkl'
 INTENSITY_PKL_FILENAME = 'intensity_timeseries.pkl'
 PITCH_PKL_FILENAME = 'pitch_timeseries.pkl'
+SYLLABLE_PKL_FILENAME = 'syllable_timeseries.pkl'
 PITCH_INTENSITY_SPEECHVARS_PICKLE_FILENAME = 'prosody_w_speech_df.pkl'
 
 
@@ -40,7 +41,7 @@ def add_speech_vars_to_df(df):
 
     :param df:           Pandas dataframe with columns "pitch", "srt_segment_info", and "speech_timeseries".
     :return: df_speech:  Same pandas dataframe as input, but with added vars / columns "speech_time_abs",
-                         "speech_time_rel", "sil_time_abs", "sil_time_rel", "speech_syl", and "speech_rate_syl".
+                         "speech_time_rel", "sil_time_abs", "sil_time_rel", "speech_syl", "speech_rate_syl".
     """
 
     # Deep copy input dataframe, so we do not break it if stg goes wrong.
@@ -75,8 +76,8 @@ def add_speech_vars_to_df(df):
         # Get total number of syllables
         speech_segments = [seg_dict['content'] for seg_dict in srt_segments]  # List of strings
         speech_syllables = get_syllables(speech_segments)[0]
-        df_speech.loc[:, 'speech_syl'] = speech_syllables                                                     # no
-        df_speech.loc[:, 'speech_rate_syl'] = speech_syllables / df_speech.loc[row_idx, 'speech_time_abs']    # syl/s
+        df_speech.loc[row_idx, 'speech_syl'] = speech_syllables                                                     # no
+        df_speech.loc[row_idx, 'speech_rate_syl'] = speech_syllables / df_speech.loc[row_idx, 'speech_time_abs']    # syl/s
 
     return df_speech
 
@@ -93,6 +94,80 @@ def get_syllables(list_of_strings):
     syllables = [len(s) for s in vowels]
     syllables_total = sum(syllables)
     return syllables_total, syllables
+
+
+def get_syllable_timeseries(df, timeseries_sr=TIMESERIES_SAMPLING_RATE_HZ):
+    """
+    Function to derive the syllable timeseries from the srt data of each segment, for each audio (row) in the
+    input dataframe. For each audio (row), the resulting syllable timeseries has the same shape as the already existing
+    binary speech timeseries.
+
+    For a given speech segment, the sum of the syllable timeseries is the number of syllables spoken in that segment.
+    Since we do not have word-level alignment yet, the number of syllables for a speech segment is divided by the
+    number of samples in that segment, yielding the syllable timeseries values. E.g. for a segment of 500 samples and 10
+    syllables, each sample has the value of 10 / 500 = 0.02. Samples outside of detected speech parts are set to 0.
+
+    Outputs are a numpy array and a list of numpy arrays.
+
+    :param df:                 Pandas dataframe with columns "pitch", "srt_segment_info", and "speech_timeseries".
+    :param timeseries_sr:      Sampling rate of pitch timeseries. Should be the same value used for speech timeseries.
+                               In order to ensure that, it defaults to module-level constant.
+    :return: row_indices:      Numpy array of row indices, corresponding to dataframe rows used for arrays
+                               in pitch_timeseries.
+    :return: syl_timeseries:   List of numpy arrays, each one holding a syllable timeseries.
+    """
+
+    row_indices_list = []
+    syl_timeseries = []
+
+    for row_idx in df.index:
+
+        # User feedback on progress
+        if row_idx % 10 == 0:
+            print('\nWorking on row ' + str(row_idx))
+
+        # Data we need: list of pitch values, one array / segment, segment timing info, speech timeseries
+        segment_times = df.loc[row_idx, 'srt_segment_info']
+        speech_ts = df.loc[row_idx, 'speech_timeseries']
+
+        # Transform segment timing info into lists of timestamps and sample numbers
+        seg_starts = [s['start'] for s in segment_times]
+        seg_ends = [s['end'] for s in segment_times]
+        seg_starts_samples = [int(start_t * timeseries_sr) for start_t in seg_starts]
+        seg_ends_samples = [int(end_t * timeseries_sr) for end_t in seg_ends]
+
+        # Get segment content as a list of syllable numbers.
+        seg_content = [s['content'] for s in segment_times]
+        seg_syllables = get_syllables(seg_content)[1]
+
+        # Init a numpy array of zeros with the same shape as speech timeseries. We will add the calculated pitch
+        # segment arrays to this base array with the right indices.
+        syl_ts = np.zeros(speech_ts.shape)
+
+        # Loop through the segments and derive a syllable array for that segment, the same shape as
+        # corresponding bit in the speech timeseries.
+        for seg_idx in range(len(segment_times)):
+
+            # Get the part of the speech timeseries corresponding to the current segment.
+            seg_speech_ts = speech_ts[seg_starts_samples[seg_idx]: seg_ends_samples[seg_idx]]
+
+            # Init an array with zeros with the same shape as the speech timeseries for this segment.
+            seg_syl_ts = np.zeros(seg_speech_ts.shape)
+            # Add the number of syllables in the current segment to each sample, and divide by the length.
+            seg_syl_ts = (seg_syl_ts + seg_syllables[seg_idx]) / len(seg_syl_ts)
+
+            # Add back the segment-level syllable array to the overall syllable timeseries array
+            syl_ts[seg_starts_samples[seg_idx]: seg_ends_samples[seg_idx]] = seg_syl_ts
+
+        # Store the row index and the final pitch timeseries in the output lists
+        row_indices_list.append(row_idx)
+        syl_timeseries.append(syl_ts)
+
+    # Transform lists into numpy arrays before returning
+    row_indices = np.asarray(row_indices_list)
+
+    return row_indices, syl_timeseries
+
 
 
 def get_pitch_timeseries(df, timeseries_sr=TIMESERIES_SAMPLING_RATE_HZ):
@@ -142,24 +217,24 @@ def get_pitch_timeseries(df, timeseries_sr=TIMESERIES_SAMPLING_RATE_HZ):
             seg_speech_ts = speech_ts[seg_starts_samples[seg_idx]: seg_ends_samples[seg_idx]]
 
             # Init an array with zeros with the same shape as the speech timeseries for this segment
-            seg_int_ts = np.zeros(seg_speech_ts.shape)
+            seg_pitch_ts = np.zeros(seg_speech_ts.shape)
 
             # Upsample / interpolate pitch values into this segment-shaped array
-            int_array = pitch_list[seg_idx]
+            pitch_array = pitch_list[seg_idx]
             # Only upsample existing (not empty) pitch array, otherwise the seg_int_ts var just remains an array
             # of zeros.
-            if list(int_array):
-                xp = np.arange(0, len(int_array), 1)
-                x = np.arange(0, len(int_array)-1, (len(int_array)-1) / (len(seg_int_ts)-1))
-                if (len(x) + 1) == len(seg_int_ts):
+            if list(pitch_array):
+                xp = np.arange(0, len(pitch_array), 1)
+                x = np.arange(0, len(pitch_array)-1, (len(pitch_array)-1) / (len(seg_pitch_ts)-1))
+                if (len(x) + 1) == len(seg_pitch_ts):
                     x = np.concatenate((x, np.asarray([xp[-1]])))
-                seg_int_ts[0:] = np.interp(x, xp, int_array)
+                seg_pitch_ts[0:] = np.interp(x, xp, pitch_array)
 
             # Sanity check about shape
-            assert seg_int_ts.shape == seg_speech_ts.shape, 'Wrong segment pitch array shape!!!'
+            assert seg_pitch_ts.shape == seg_speech_ts.shape, 'Wrong segment pitch array shape!!!'
 
             # Add back the interpolated segment-level pitch array to the overall pitch timeseries array
-            pitch_ts[seg_starts_samples[seg_idx]: seg_ends_samples[seg_idx]] = seg_int_ts
+            pitch_ts[seg_starts_samples[seg_idx]: seg_ends_samples[seg_idx]] = seg_pitch_ts
 
         # Store the row index and the final pitch timeseries in the output lists
         row_indices_list.append(row_idx)
@@ -351,6 +426,12 @@ def main():
     pitch_pkl_path = os.path.join(args.data_dir, PITCH_PKL_FILENAME)
     with open(pitch_pkl_path, 'wb') as pkl_out:
         pickle.dump([pitch_row_indices, pitch_timeseries], pkl_out)
+
+    # Get syllable timeseries, save out resulting variables with pickle.
+    syl_row_indices, syl_timeseries = get_syllable_timeseries(df_pitch_intensity)
+    syl_pkl_path = os.path.join(args.data_dir, SYLLABLE_PKL_FILENAME)
+    with open(syl_pkl_path, 'wb') as syl_out:
+        pickle.dump([syl_row_indices, syl_timeseries], syl_out)
 
     # Get speech related aggregate variables for each row in dataframe.
     df_speech = add_speech_vars_to_df(df_pitch_intensity)
