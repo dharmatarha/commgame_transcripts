@@ -152,8 +152,8 @@ def filter_backchannel_subs(subtitles_list, max_length_s=1.5, padding_s=1):
             # If the next subtitle happens during the time of the current subtitle considering padding as well),
             # and it is considered short enough, delete it.
             if (sub_next.end.total_seconds() + padding_s <= sub.end.total_seconds()) and \
-                (sub_next.start.total_seconds()-padding_s >= sub.start.total_seconds()) and \
-                (sub_next.end-sub_next.start).total_seconds() <= max_length_s:
+                    (sub_next.start.total_seconds()-padding_s >= sub.start.total_seconds()) and \
+                    (sub_next.end-sub_next.start).total_seconds() <= max_length_s:
                 subs_list.pop(sub_idx + 1)
     return subs_list
 
@@ -170,7 +170,7 @@ def filter_tags_in_subs(subtitles_list, tags=('<laugh>', '<hes>', '<hum>')):
     subs_list = copy.deepcopy(subtitles_list)  # Avoid messing up input arg list in place
     for sub in subs_list:
         for t in tags:
-            sub.content.replace(t, '')
+            sub.content = sub.content.replace(t, '')
     subs_list = [s for s in subs_list if s.content]
     return subs_list
 
@@ -287,12 +287,12 @@ def main():
             # (1) replace common misspellings; (2) remove tags; (3) clear extra whitespaces.
             print('Reading srt files, cleaning up subtitles...')
             subtitles_list = srt_to_txt(session_files)
-            subtitles_list = replace_patterns_in_subs(subtitles_list)
-            subtitles_list = filter_tags_in_subs(subtitles_list)
-            subtitles_list = norm_whitespaces_in_subs(subtitles_list)
+            subtitles_list_repl = replace_patterns_in_subs(subtitles_list)
+            subtitles_list_notags = filter_tags_in_subs(subtitles_list_repl)
+            subtitles_list_final = norm_whitespaces_in_subs(subtitles_list_notags)
 
             # Write out final list of subtitles as txt.
-            subs_list = [sub.content + '\n' for sub in subtitles_list]
+            subs_list = [sub.content + '\n' for sub in subtitles_list_final]
             output_filepath = os.path.join(pair_dir,
                                            '_'.join(['pair' + str(pair),
                                                      sessions_list[ses_idx],
