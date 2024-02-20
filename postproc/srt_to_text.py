@@ -259,7 +259,7 @@ def main():
     args = parser.parse_args()
 
     # Sanity check on "data_dir".
-    if not os.path.exists(args.audio_dir):
+    if not os.path.exists(args.data_dir):
         raise NotADirectoryError('Input arg --audio_dir is not a valid path!')
     # If there are two pair numbers, expand them into a range.
     if len(args.pair_numbers) == 2:
@@ -278,7 +278,7 @@ def main():
         pair_dir = os.path.join(args.data_dir, 'pair' + str(pair))
         print('\nListing srt files for pair ' + str(pair) + ' in ' + pair_dir + '.')
         pair_srt_files, sessions_list = find_srt_pairs(pair_dir, pair)
-        print('Found srt files for ' + len(pair_srt_files) + ' sessions:')
+        print('Found srt files for ' + str(len(pair_srt_files)) + ' sessions:')
         print(pair_srt_files)
 
         # Loop through pairs of srt files.
@@ -292,7 +292,7 @@ def main():
             subtitles_list = norm_whitespaces_in_subs(subtitles_list)
 
             # Write out final list of subtitles as txt.
-            subs_list = [sub.content for sub in subtitles_list]
+            subs_list = [sub.content + '\n' for sub in subtitles_list]
             output_filepath = os.path.join(pair_dir,
                                            '_'.join(['pair' + str(pair),
                                                      sessions_list[ses_idx],
