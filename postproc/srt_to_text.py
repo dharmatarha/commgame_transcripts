@@ -95,6 +95,14 @@ def srt_to_txt(srt_files, speaker_tags=None):
     return all_subs
 
 
+def clear_empty_subs(subtitles_list):
+    """
+    One-liner to delete empty subtitles from a list of subtitle objects.
+    """
+    subs_list = copy.deepcopy(subtitles_list)  # Avoid messing up input arg list in place
+    return [s for s in subs_list if s.content]
+
+
 def replace_patterns_in_subs(subtitles_list, replacements=REPLACEMENTS):
     """
     Helper function to traverse a list of subtitle objects and perform the set of string replacements defined in
@@ -109,7 +117,7 @@ def replace_patterns_in_subs(subtitles_list, replacements=REPLACEMENTS):
     subs_list = copy.deepcopy(subtitles_list)  # Avoid messing up input arg list in place
     for sub in subs_list:
         for r_key in replacements:
-            sub.content.replace(r_key, replacements[r_key])
+            sub.content = sub.content.replace(r_key, replacements[r_key])
     return subs_list
 
 
