@@ -59,6 +59,7 @@ REPLACEMENTS = {
     '<hum<': '<hum>',
     '>hum>': '<hum>',
     '>hum<': '<hum>'}
+SENTENCE_ENDING_PUNCTUATION_MARKS = ['.', '?', '!']
 
 
 def srt_to_txt(srt_files, speaker_tags=None):
@@ -95,12 +96,46 @@ def srt_to_txt(srt_files, speaker_tags=None):
     return all_subs
 
 
-def clear_empty_subs(subtitles_list):
+def clear_empty_subs(subtitles_list, speaker_tags=None, speaker_no=2):
     """
-    One-liner to delete empty subtitles from a list of subtitle objects.
+    Helper function to delete empty subtitles which contain at most speaker tags from a list of subtitle objects.
+    Speaker tags are either supplied or are assumed to consist of default tags as specified in srt_to_txt ("Speaker1: ",
+    "Speaker2: ", ..., "SpeakerN: "). For default speaker tags, the number of speakers might be specified with input
+    arg speaker_no. Tags ending with and without a whitespace are treated equally.
+    Works on deep-copied version of input list to avoid unintentional replacement-in-place.
+    :param subtitles_list:  List of srt subtitle objects.
+    :param speaker_tags:    Iterable with one string for each srt file, e.g. ('SPEAKER1: ', 'SPEAKER2: '). The tags are
+                      inserted at the beginning of each subtitle (e.g. if subtitle content was "Hello!", it becomes
+                      "SPEAKER1: Hello!"). Defaults to the tuple ('Speaker1: ', 'Speaker2: ', ... , 'SpeakerN: ')
+                      where N = speaker_no.
+    :param speaker_no:      Number of speakers for deriving default speaker tags. Defaults to 2.
+    :return:                List of srt subtitle objects.
     """
     subs_list = copy.deepcopy(subtitles_list)  # Avoid messing up input arg list in place
-    return [s for s in subs_list if s.content]
+    if not speaker_tags:
+        speaker_tags_wh = tuple(['Speaker' + str(i+1) + ': ' for i in range(speaker_no)])
+        speaker_tags_stripped = tuple(['Speaker' + str(i+1) + ':' for i in range(speaker_no)])
+        speaker_tags = speaker_tags_wh + speaker_tags_stripped
+    subs_list = [sub for sub in subs_list if sub.content and sub.content not in speaker_tags]
+    return subs_list
+
+
+def merge_close_subs(subtitles_list, time_thr=0.1):
+    """
+
+    """
+    subs_list = copy.deepcopy(subtitles_list)  # Avoid messing up input arg list in place
+    # Check the list for empty subtitles. Raise exception if any of them is empty, as it is not clear what
+    # should happen in that case.
+    for sub in subs_list if not sub.content
+    subs_n = len(subtitles_list)
+    for sub_idx, sub in enumerate(subs_list):
+        if sub_idx != subs_n - 1:
+            # Check if the current subtitle ends with punctuation.
+            if (sub.content[-1] not in SENTENCE_ENDING_PUNCTUATION_MARKS) and \
+                subs_list[sub_idx+1].content[0].isupper()
+
+
 
 
 def replace_patterns_in_subs(subtitles_list, replacements=REPLACEMENTS):
@@ -295,12 +330,13 @@ def main():
             # (1) replace common misspellings; (2) remove tags; (3) clear extra whitespaces.
             print('Reading srt files, cleaning up subtitles...')
             subtitles_list = srt_to_txt(session_files)
-            subtitles_list_repl = replace_patterns_in_subs(subtitles_list)
-            subtitles_list_notags = filter_tags_in_subs(subtitles_list_repl)
-            subtitles_list_final = norm_whitespaces_in_subs(subtitles_list_notags)
+            subtitles_list = replace_patterns_in_subs(subtitles_list)
+            subtitles_list = filter_tags_in_subs(subtitles_list)
+            subtitles_list = norm_whitespaces_in_subs(subtitles_list)
+            subtitles_list = clear_empty_subs(subtitles_list)
 
             # Write out final list of subtitles as txt.
-            subs_list = [sub.content + '\n' for sub in subtitles_list_final]
+            subs_list = [sub.content + '\n' for sub in subtitles_list]
             output_filepath = os.path.join(pair_dir,
                                            '_'.join(['pair' + str(pair),
                                                      sessions_list[ses_idx],
