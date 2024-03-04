@@ -10,7 +10,7 @@ are provided, they are treated as the start and the end of a range (inclusive on
 
 Outputs are .txt files in the same folders that hold the srt files.
 
-By default subtitles from pairs of srt files are:
+By default, subtitles from pairs of srt files are:
 (1) Sorted according to their start time;
 (2) Cleaned from extra whitespaces and from common errors / misspellings defined in REPLACEMENTS constant;
 (3) Cleaned from tags of non-linguistic vocal behavior (laughter, hesitation, hums).
@@ -21,6 +21,13 @@ not applied by default.
 Notes:
 - Include options to call additional cleaning steps, with further options specifying main parameters.
 - Look into spaCy methods we could apply as well after an import.
+
+
+TODO:
+- Change default speaker tags to Hungarian ones
+- Function to merge subsequent turns from the same speaker, regardless of timing, punctuation, etc.
+- Function to filter repeated words
+- Function to filter repeated first syllables of words
 
 """
 
@@ -50,6 +57,7 @@ REPLACEMENTS = {
     'Bme': 'BME',
     'bmés': 'BME-s',
     'károli': 'Károli',
+    'Károlyi': 'Károli',
     '<laugh<': '<laugh>',
     '>laugh>': '<laugh>',
     '>laugh<': '<laugh>',
@@ -58,26 +66,26 @@ REPLACEMENTS = {
     '>hes<': '<hes>',
     '<hum<': '<hum>',
     '>hum>': '<hum>',
-    '>hum<': '<hum>'}
+    '>hum<': '<hum>',
+    'Semmelweisz': 'Semmelweis',
+    'Semmelweiss': 'Semmelweis'}
 SENTENCE_ENDING_PUNCTUATION_MARKS = ['.', '?', '!']
+DEFAULT_SPEAKER_TAGS = ('Beszélő egy: ', 'Beszélő kettő: ')
 
 
-def srt_to_txt(srt_files, speaker_tags=None):
+def srt_to_txt(srt_files, speaker_tags=DEFAULT_SPEAKER_TAGS):
     """
-    Function to generate an sorted list of subtitles from a list of srt files. Srt files might have temporally
+    Function to generate a sorted list of subtitles from a list of srt files. Srt files might have temporally
     overlapping content. Output list is sorted according to the start time of each subtitle.
 
     :param srt_files:     List of srt file paths.
     :param speaker_tags:  Iterable with one string for each srt file, e.g. ('SPEAKER1: ', 'SPEAKER2: '). The tags are
                           inserted at the beginning of each subtitle (e.g. if subtitle content was "Hello!", it becomes
-                          "SPEAKER1: Hello!"). Defaults to the tuple ('Speaker1: ', 'Speaker2: ', ... , 'SpeakerN: ')
-                          where N = len(srt_files).
+                          "SPEAKER1: Hello!"). Defaults to the module constant DEFAULT_SPEAKER_TAGS.
     :return: all_subs:    List of all subtitles parsed from the srt files in input arg "srt_files". Sorted according to
                           subtitle start times.
     """
     # Check inputs.
-    if not speaker_tags:
-        speaker_tags = tuple(['Speaker' + str(i+1) + ': ' for i in range(len(srt_files))])
     if len(srt_files) != len(speaker_tags):
         raise ValueError('Input args srt_files and speaker_tags must have equal length')
     # Open and parse srt files. Var "subs" is a list of lists of subtitle objects.
@@ -96,7 +104,7 @@ def srt_to_txt(srt_files, speaker_tags=None):
     return all_subs
 
 
-def clear_empty_subs(subtitles_list, speaker_tags=None, speaker_no=2):
+def clear_empty_subs(subtitles_list, speaker_tags=DEFAULT_SPEAKER_TAGS):
     """
     Helper function to delete empty subtitles which contain at most speaker tags from a list of subtitle objects.
     Speaker tags are either supplied or are assumed to consist of default tags as specified in srt_to_txt ("Speaker1: ",
@@ -106,43 +114,72 @@ def clear_empty_subs(subtitles_list, speaker_tags=None, speaker_no=2):
     :param subtitles_list:  List of srt subtitle objects.
     :param speaker_tags:    Iterable with one string for each srt file, e.g. ('SPEAKER1: ', 'SPEAKER2: '). The tags are
                       inserted at the beginning of each subtitle (e.g. if subtitle content was "Hello!", it becomes
-                      "SPEAKER1: Hello!"). Defaults to the tuple ('Speaker1: ', 'Speaker2: ', ... , 'SpeakerN: ')
-                      where N = speaker_no.
-    :param speaker_no:      Number of speakers for deriving default speaker tags. Defaults to 2.
+                      "SPEAKER1: Hello!"). Defaults to the module constant DEFAULT_SPEAKER_TAGS.
     :return:                List of srt subtitle objects.
     """
     subs_list = copy.deepcopy(subtitles_list)  # Avoid messing up input arg list in place
-    if not speaker_tags:
-        speaker_tags_wh = tuple(['Speaker' + str(i+1) + ': ' for i in range(speaker_no)])
-        speaker_tags_stripped = tuple(['Speaker' + str(i+1) + ':' for i in range(speaker_no)])
-        speaker_tags = speaker_tags_wh + speaker_tags_stripped
     subs_list = [sub for sub in subs_list if sub.content and sub.content not in speaker_tags]
     return subs_list
 
 
-def merge_close_subs(subtitles_list, time_thr=0.1):
+def merge_close_subs(subtitles_list, speaker_tags=DEFAULT_SPEAKER_TAGS, time_thr=0.5):
     """
-
+    Helper function to merge subsequent subtitles that (1) belong to the same speaker, (2) are not separate sentences,
+    and (3) have only a small temporal gap between them.
+    :param subtitles_list:  List of srt subtitle objects.
+    :param speaker_tags:    Iterable with one string for each srt file, e.g. ('SPEAKER1: ', 'SPEAKER2: '). The tags are
+                      inserted at the beginning of each subtitle (e.g. if subtitle content was "Hello!", it becomes
+                      "SPEAKER1: Hello!"). Defaults to the module constant DEFAULT_SPEAKER_TAGS.
+    :param time_thr:        Numeric value, maximum time in seconds between subsequent subtitles for merging them.
+    :return:                List of srt subtitle objects.
     """
     subs_list = copy.deepcopy(subtitles_list)  # Avoid messing up input arg list in place
-    # Check the list for empty subtitles. Raise exception if any of them is empty, as it is not clear what
-    # should happen in that case.
-    for sub in subs_list if not sub.content
-    subs_n = len(subtitles_list)
+    # Check the list for empty subtitles only containing speaker tags. Raise exception if any of them is empty, as it
+    # is not clear what should happen in that case.
+    empty_subs = [True for sub in subs_list if sub.content in speaker_tags]
+    if any(empty_subs):
+        raise ValueError('At least subtitle object was empty / contained only speaker tag!')
+    # Loop through subtitles, do merge if subsequent ones meet the requirements.
     for sub_idx, sub in enumerate(subs_list):
-        if sub_idx != subs_n - 1:
-            # Check if the current subtitle ends with punctuation.
-            if (sub.content[-1] not in SENTENCE_ENDING_PUNCTUATION_MARKS) and \
-                subs_list[sub_idx+1].content[0].isupper()
+        if sub_idx < len(subs_list) - 1:
 
+            # Set the flags marking the necessary conditions for merging to False.
+            speaker_match_flag = False
+            punct_flag = False
+            temporal_gap_flag = False
 
+            # Check if the two subtitles belong to the same speaker, adjust the flag if yes.
+            current_subtitle = sub.content
+            next_subtitle = subs_list[sub_idx + 1].content
+            current_speaker = [tag for tag in speaker_tags if current_subtitle.startswith(tag)][0]
+            next_speaker = [tag for tag in speaker_tags if next_subtitle.startswith(tag)][0]
+            if current_speaker == next_speaker:
+                speaker_match_flag = True
+
+            # Check if the current subtitle ends without punctuation and the next one does not start with upper case.
+            if (current_subtitle[-1] not in SENTENCE_ENDING_PUNCTUATION_MARKS) and \
+               next_subtitle[len(next_speaker):][0].islower():
+                punct_flag = True
+
+            # Check if the time between the two subtitle objects is equal to or below the threshold.
+            if (subs_list[sub_idx + 1].start - sub.end).total_seconds() <= time_thr:
+                temporal_gap_flag = True
+
+            # Merge if conditions are met: add content from next subtitle to current one, adjust end time, and
+            # pop the next subtitle from subtitles list.
+            if speaker_match_flag and punct_flag and temporal_gap_flag:
+                sub.content = ' '.join([sub.content, next_subtitle[len(next_speaker):]])
+                sub.end = subs_list[sub_idx + 1].end
+                subs_list.pop(sub_idx + 1)
+
+    return subs_list
 
 
 def replace_patterns_in_subs(subtitles_list, replacements=REPLACEMENTS):
     """
     Helper function to traverse a list of subtitle objects and perform the set of string replacements defined in
-    "replacements". Returns a list of subtitle objects. Replacements are done with simple string.replace(), no fancy regex patterns to
-    use here.
+    "replacements". Returns a list of subtitle objects. Replacements are done with simple string.replace(), no fancy
+    regex patterns to use here.
     Works on deep-copied version of input list to avoid unintentional replacement-in-place.
     :param subtitles_list:  List of srt subtitle objects.
     :param replacements:    Dictionary, with keys and values corresponding to strings to replace and their
@@ -169,7 +206,7 @@ def filter_short_subs(subtitles_list, min_length_s=1):
     return subs_list
 
 
-def filter_backchannel_subs(subtitles_list, max_length_s=1.5, padding_s=1):
+def filter_backchannel_subs(subtitles_list, max_length_s=1.0, padding_s=0.5):
     """
     Helper function to delete short, "backchannel" type subtitles from a list of srt subtitle objects.
     Backchannel is defined as short speech uttered during a longer, "dominant" speech segment by some other speaker.
@@ -192,7 +229,7 @@ def filter_backchannel_subs(subtitles_list, max_length_s=1.5, padding_s=1):
         # If we are not at the end of the subtitle list, compare the timing of the current and the next subtitle.
         if sub_idx != len(subs_list)-1:
             sub_next = subs_list[sub_idx + 1]
-            # If the next subtitle happens during the time of the current subtitle considering padding as well),
+            # If the next subtitle happens during the time of the current subtitle (considering padding as well),
             # and it is considered short enough, delete it.
             if (sub_next.end.total_seconds() + padding_s <= sub.end.total_seconds()) and \
                     (sub_next.start.total_seconds()-padding_s >= sub.start.total_seconds()) and \
@@ -303,7 +340,7 @@ def main():
 
     # Sanity check on "data_dir".
     if not os.path.exists(args.data_dir):
-        raise NotADirectoryError('Input arg --audio_dir is not a valid path!')
+        raise NotADirectoryError('Input arg --data_dir is not a valid path!')
     # If there are two pair numbers, expand them into a range.
     if len(args.pair_numbers) == 2:
         pair_numbers = list(range(args.pair_numbers[0], args.pair_numbers[1]+1))
@@ -334,6 +371,7 @@ def main():
             subtitles_list = filter_tags_in_subs(subtitles_list)
             subtitles_list = norm_whitespaces_in_subs(subtitles_list)
             subtitles_list = clear_empty_subs(subtitles_list)
+            subtitles_list = merge_close_subs(subtitles_list)
 
             # Write out final list of subtitles as txt.
             subs_list = [sub.content + '\n' for sub in subtitles_list]
