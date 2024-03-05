@@ -206,9 +206,9 @@ pros_df = pd.read_pickle(os.path.join(DATA_DIR, DF_PKL_WITH_SPEECH_VARS))
 
 
 # Temporary parameters for moving windows.
-w_s = 60
-s_s = 20
-min_s = 240
+w_s = 25
+s_s = 12.5
+min_s = 237.5
 
 # Loop through real and pseudo pairs (rows) of stat_df
 for pair_idx in stat_df.index:
@@ -343,9 +343,9 @@ with open(os.path.join(DATA_DIR, BASE_TABLE_INTERIM_CSV), 'w') as f:
 
 
 # Temporary parameters for moving windows.
-w_s = 60
-s_s = 20
-min_s = 240
+w_s = 25
+s_s = 12.5
+min_s = 237.5
 
 # Loop through real and pseudo pairs (rows) of stat_df
 for pair_idx in stat_df.index:
@@ -387,7 +387,7 @@ for pair_idx in stat_df.index:
         pitch_ts_m = pitch_ts[idx_m]
         pitch_ts_g = pitch_ts[idx_g]
 
-        # Correlation / convergence in terms of the amount of speech (number of syllables).
+        # Correlation / convergence in terms of pitch.
         # Using mean as stat.
         corr_coeff, conv_beta, diff_change = mov_window_corr_conv(pitch_ts_m, pitch_ts_g,
                                                                   sr=TIMESERIES_SAMPLING_RATE,
@@ -401,7 +401,7 @@ for pair_idx in stat_df.index:
         stat_df.loc[pair_idx, 'conv_b_pitch'] = conv_beta
         stat_df.loc[pair_idx, 'diff_change_pitch'] = diff_change
 
-        # Correlation / convergence in terms of the amount of speech (number of syllables).
+        # Correlation / convergence in terms of pitch.
         # Using std as stat.
         corr_coeff, conv_beta, diff_change = mov_window_corr_conv(pitch_ts_m, pitch_ts_g,
                                                                   sr=TIMESERIES_SAMPLING_RATE,
@@ -434,9 +434,9 @@ res_p6 = real_vs_pseudo(stat_df, 'diff_change_std_pitch', real_mask, pseudo_mask
 
 
 # Temporary parameters for moving windows.
-w_s = 60
-s_s = 20
-min_s = 240
+w_s = 25
+s_s = 12.5
+min_s = 237.5
 
 # Loop through real and pseudo pairs (rows) of stat_df
 for pair_idx in stat_df.index:
@@ -478,7 +478,7 @@ for pair_idx in stat_df.index:
         int_ts_m = int_ts[idx_m]
         int_ts_g = int_ts[idx_g]
 
-        # Correlation / convergence in terms of the amount of speech (number of syllables).
+        # Correlation / convergence in terms of vocal intensity.
         # Using mean as stat.
         corr_coeff, conv_beta, diff_change = mov_window_corr_conv(int_ts_m, int_ts_g,
                                                                   sr=TIMESERIES_SAMPLING_RATE,
@@ -492,7 +492,7 @@ for pair_idx in stat_df.index:
         stat_df.loc[pair_idx, 'conv_b_int'] = conv_beta
         stat_df.loc[pair_idx, 'diff_change_int'] = diff_change
 
-        # Correlation / convergence in terms of the amount of speech (number of syllables).
+        # Correlation / convergence in terms of  vocal intensity.
         # Using std as stat.
         corr_coeff, conv_beta, diff_change = mov_window_corr_conv(int_ts_m, int_ts_g,
                                                                   sr=TIMESERIES_SAMPLING_RATE,
