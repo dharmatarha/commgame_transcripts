@@ -175,6 +175,41 @@ def merge_close_subs(subtitles_list, speaker_tags=DEFAULT_SPEAKER_TAGS, time_thr
     return subs_list
 
 
+def merge_subs_simple(subtitles_list, speaker_tags=DEFAULT_SPEAKER_TAGS):
+    """
+    Helper function to merge subsequent subtitles that belong to the same speaker, irrespective of timing or
+    punctuation. See merge_close_subs for a more complex use-case.
+    :param subtitles_list:  List of srt subtitle objects.
+    :param speaker_tags:    Iterable with one string for each srt file, e.g. ('SPEAKER1: ', 'SPEAKER2: '). The tags are
+                      inserted at the beginning of each subtitle (e.g. if subtitle content was "Hello!", it becomes
+                      "SPEAKER1: Hello!"). Defaults to the module constant DEFAULT_SPEAKER_TAGS.
+    :return:                List of srt subtitle objects.
+    """
+    subs_list = copy.deepcopy(subtitles_list)  # Avoid messing up input arg list in place
+    # Check the list for empty subtitles only containing speaker tags. Raise exception if any of them is empty, as it
+    # is not clear what should happen in that case.
+    empty_subs = [True for sub in subs_list if sub.content in speaker_tags]
+    if any(empty_subs):
+        raise ValueError('At least subtitle object was empty / contained only speaker tag!')
+    # Loop through subtitles, do merge if subsequent ones belong to the same speaker.
+    for sub_idx, sub in enumerate(subs_list):
+        if sub_idx < len(subs_list) - 1:
+
+            # Check if the two subtitles belong to the same speaker, adjust the flag if yes.
+            current_subtitle = sub.content
+            next_subtitle = subs_list[sub_idx + 1].content
+            current_speaker = [tag for tag in speaker_tags if current_subtitle.startswith(tag)][0]
+            next_speaker = [tag for tag in speaker_tags if next_subtitle.startswith(tag)][0]
+            if current_speaker == next_speaker:
+                sub.content = ' '.join([sub.content, next_subtitle[len(next_speaker):]])
+                sub.end = subs_list[sub_idx + 1].end
+                subs_list.pop(sub_idx + 1)
+
+    return subs_list
+
+
+
+
 def replace_patterns_in_subs(subtitles_list, replacements=REPLACEMENTS):
     """
     Helper function to traverse a list of subtitle objects and perform the set of string replacements defined in
