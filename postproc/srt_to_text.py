@@ -22,11 +22,7 @@ Notes:
 - Include options to call additional cleaning steps, with further options specifying main parameters.
 - Look into spaCy methods we could apply as well after an import.
 
-
 TODO:
-- Change default speaker tags to Hungarian ones
-- Function to merge subsequent turns from the same speaker, regardless of timing, punctuation, etc.
-- Function to filter repeated words
 - Function to filter repeated first syllables of words
 
 """
@@ -38,6 +34,7 @@ import srt
 import copy
 import re
 from glob import glob
+import datetime
 
 
 REPLACEMENTS = {
@@ -208,6 +205,39 @@ def merge_subs_simple(subtitles_list, speaker_tags=DEFAULT_SPEAKER_TAGS):
     return subs_list
 
 
+def filter_word_repeats(subtitles_list, repeat_with_comma=True):
+    """
+    Helper function to filter out repeated words from subtitle (srt) objects. Depending on the repeat_with_comma arg,
+    a "word" (result of string.split()) ending with comma is equivalent to the same word without comma or not. E.g.
+    if repeat_with_comma is True, these strings / words count as repeats: ['python,', 'python'].
+    :param subtitles_list:    List of srt subtitle objects.
+    :param repeat_with_comma: Boolean. If True, a string with comma as the last character is considered the same as the
+                              same string without the comma.
+
+    >>> filter_word_repeats([srt.Subtitle(index=0, start=datetime.timedelta(0), end=datetime.timedelta(1),
+                                          content='aa aa b b b cc, cc, cc, d, d')])
+    [Subtitle(index=0, start=datetime.timedelta(0), end=datetime.timedelta(days=1), content='aa b cc, d', proprietary='')]
+
+    """
+    subs_list = copy.deepcopy(subtitles_list)  # Avoid messing up input arg list in place
+    # Loop through subtitle (srt) objects, get word list from each subtitle content.
+    for sub in subs_list:
+        words = sub.content.split(' ')
+        # Loop through words and compare current word to the subsequent one, either taking into account potential
+        # end-of-word comma characters or not, depending on repeat_with_comma.
+        for wi, w in enumerate(words):
+            if repeat_with_comma:
+                if w[-1] == ',':
+                    w = w[:-1]
+                while wi < len(words)-1 and (w == words[wi + 1] or w + ',' == words[wi + 1]):
+                    words.pop(wi)
+            elif not repeat_with_comma:
+                while wi < len(words) - 1 and w == words[wi + 1]:
+                    words.pop(wi)
+        # Simply join the final word list back together for subtitle content.
+        sub.content = ' '.join(words)
+
+    return subs_list
 
 
 def replace_patterns_in_subs(subtitles_list, replacements=REPLACEMENTS):
