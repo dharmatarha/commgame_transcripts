@@ -208,15 +208,15 @@ def merge_subs_simple(subtitles_list, speaker_tags=DEFAULT_SPEAKER_TAGS):
 def filter_word_repeats(subtitles_list, repeat_with_comma=True):
     """
     Helper function to filter out repeated words from subtitle (srt) objects. Depending on the repeat_with_comma arg,
-    a "word" (result of string.split()) ending with comma is equivalent to the same word without comma or not. E.g.
+    a "word" (result of string.split()) ending with comma is equivalent to the same word without comma or not. That is,
     if repeat_with_comma is True, these strings / words count as repeats: ['python,', 'python'].
     :param subtitles_list:    List of srt subtitle objects.
     :param repeat_with_comma: Boolean. If True, a string with comma as the last character is considered the same as the
-                              same string without the comma.
+                              same string without the comma. Defaults to True.
 
-    >>> filter_word_repeats([srt.Subtitle(index=0, start=datetime.timedelta(0), end=datetime.timedelta(1),
+    >>> filter_word_repeats([srt.Subtitle(index=0, start=datetime.timedelta(0), end=datetime.timedelta(0.00001),
                                           content='aa aa b b b cc, cc, cc, d, d')])
-    [Subtitle(index=0, start=datetime.timedelta(0), end=datetime.timedelta(days=1), content='aa b cc, d', proprietary='')]
+    [Subtitle(index=0, start=datetime.timedelta(0), end=datetime.timedelta(microseconds=864000), content='aa b cc, d', proprietary='')]
 
     """
     subs_list = copy.deepcopy(subtitles_list)  # Avoid messing up input arg list in place
@@ -233,6 +233,56 @@ def filter_word_repeats(subtitles_list, repeat_with_comma=True):
                     words.pop(wi)
             elif not repeat_with_comma:
                 while wi < len(words) - 1 and w == words[wi + 1]:
+                    words.pop(wi)
+        # Simply join the final word list back together for subtitle content.
+        sub.content = ' '.join(words)
+
+    return subs_list
+
+
+def filter_word_start_repeats(subtitles_list, repeat_with_dash=True):
+    """
+    Helper function to filter out instances when the start of a word is repeated in subtitle (srt) objects.
+    Examples: "fil filter" -> "filter"; "fil-filter" -> "filter"; "fil- fil- filter" -> "filter".
+
+    Depending on the repeat_with_dash arg, a "word" (result of string.split()) ending with dash is eigher equivalent to
+    the same word without dash or not. That is, if repeat_with_dash is True, these strings / words are treated as the
+    same: ['pyt-', 'pyt'].
+
+    :param subtitles_list:   List of srt subtitle objects.
+    :param repeat_with_dash: Boolean. If True, a string with dash as the last character is considered the same as the
+                             same string without the comma. Defaults to True.
+
+    >>> filter_word_start_repeats([srt.Subtitle(index=0, start=datetime.timedelta(0), end=datetime.timedelta(0.00001),
+                                          content='a- aa b-b c- c- c d ddd')])
+    [Subtitle(index=0, start=datetime.timedelta(0), end=datetime.timedelta(microseconds=864000), content='aa b c ddd', proprietary='')]
+    """
+    subs_list = copy.deepcopy(subtitles_list)  # Avoid messing up input arg list in place
+    # Loop through subtitle (srt) objects, get word list from each subtitle content.
+    for sub in subs_list:
+        words = sub.content.split(' ')
+
+        # If repeat_with_dash is True, we have to treat separately the case of repeats marked with dashes but
+        # without whitespaces, e.g. "fil-filter". For this, each word is inspected with .split('-'), then searched for
+        # equivalent starts.
+        for wi, w in enumerate(words):
+            word_parts = w.split('-')
+            if len(word_parts) > 1:
+                reference_word = word_parts[-1]
+                unique_parts = [part for part in word_parts[:-1] if not reference_word.startswith(part)] + \
+                               [reference_word]
+                words[wi] = '-'.join(unique_parts)
+
+        # Loop through words and compare current word to the subsequent one using startswith(), either taking into
+        # account potential end-of-word dash characters or not, depending on repeat_with_dash.
+        for wi, w in enumerate(words):
+            if repeat_with_dash:
+                if w[-1] == '-':
+                    w = w[:-1]
+                while wi < len(words)-1 and (words[wi + 1].startswith(w) or words[wi + 1].startswith(w + '-')):
+                    words.pop(wi)
+            elif not repeat_with_dash:
+                while wi < len(words) - 1 and words[wi + 1].startswith(w):
                     words.pop(wi)
         # Simply join the final word list back together for subtitle content.
         sub.content = ' '.join(words)
