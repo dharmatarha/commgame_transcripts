@@ -213,11 +213,12 @@ def filter_word_repeats(subtitles_list, repeat_with_comma=True):
     :param subtitles_list:    List of srt subtitle objects.
     :param repeat_with_comma: Boolean. If True, a string with comma as the last character is considered the same as the
                               same string without the comma. Defaults to True.
+    :return:                  List of srt subtitle objects.
 
-    >>> filter_word_repeats([srt.Subtitle(index=0, start=datetime.timedelta(0), end=datetime.timedelta(0.00001),
+    >>> filter_word_repeats([srt.Subtitle(index=0, start=datetime.timedelta(0), end=datetime.timedelta(0.00001), \
                                           content='aa aa b b b cc, cc, cc, d, d')])
-    [Subtitle(index=0, start=datetime.timedelta(0), end=datetime.timedelta(microseconds=864000), content='aa b cc, d', proprietary='')]
-
+    [Subtitle(index=0, start=datetime.timedelta(0), end=datetime.timedelta(microseconds=864000), content='aa b cc, d', \
+proprietary='')]
     """
     subs_list = copy.deepcopy(subtitles_list)  # Avoid messing up input arg list in place
     # Loop through subtitle (srt) objects, get word list from each subtitle content.
@@ -252,10 +253,12 @@ def filter_word_start_repeats(subtitles_list, repeat_with_dash=True):
     :param subtitles_list:   List of srt subtitle objects.
     :param repeat_with_dash: Boolean. If True, a string with dash as the last character is considered the same as the
                              same string without the comma. Defaults to True.
+    :return:                  List of srt subtitle objects.
 
-    >>> filter_word_start_repeats([srt.Subtitle(index=0, start=datetime.timedelta(0), end=datetime.timedelta(0.00001),
+    >>> filter_word_start_repeats([srt.Subtitle(index=0, start=datetime.timedelta(0), end=datetime.timedelta(0.00001), \
                                           content='a- aa b-b c- c- c d ddd')])
-    [Subtitle(index=0, start=datetime.timedelta(0), end=datetime.timedelta(microseconds=864000), content='aa b c ddd', proprietary='')]
+    [Subtitle(index=0, start=datetime.timedelta(0), end=datetime.timedelta(microseconds=864000), content='aa b c ddd', \
+proprietary='')]
     """
     subs_list = copy.deepcopy(subtitles_list)  # Avoid messing up input arg list in place
     # Loop through subtitle (srt) objects, get word list from each subtitle content.
