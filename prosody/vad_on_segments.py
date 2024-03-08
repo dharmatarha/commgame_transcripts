@@ -162,8 +162,8 @@ def digits_from_string_ends(str_list, max_d=3):
     :param max_d:    Int, the number of last characters to search for digits. Defaults to 3.
     :return: end_digits: List of integers.
 
-    >> a = ['abc1', 'dfg11', 'htk']
-    >> digits_from_string_ends(a, 2)
+    >>> a = ['abc1', 'dfg11', 'htk']
+    >>> digits_from_string_ends(a, 2)
     [1, 11, None]
     """
     end_digits_str = [re.sub('[^0-9]', '', current_str[-max_d:]) for current_str in str_list]
@@ -181,7 +181,7 @@ def reorder_segments(df):
     :return: df_reord:  Same pandas dataframe as "df" but with the lists in "segments" and "speech_timestamps" reordered
                         according to the numbering of files in the "segments" lists.
     """
-    df_reord = copy.deepcopy(df)
+    df_reord = pd.DataFrame(columns=df.columns, data=copy.deepcopy(df.values))
 
     for row_idx in df.index:
         sequence = digits_from_string_ends(df_reord.loc[row_idx, 'segments'])
