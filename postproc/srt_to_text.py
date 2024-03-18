@@ -67,7 +67,7 @@ REPLACEMENTS = {
     'Semmelweisz': 'Semmelweis',
     'Semmelweiss': 'Semmelweis'}
 SENTENCE_ENDING_PUNCTUATION_MARKS = ['.', '?', '!']
-DEFAULT_SPEAKER_TAGS = ('Beszélő egy: ', 'Beszélő kettő: ')
+DEFAULT_SPEAKER_TAGS = ('Mordor: ', 'Gondor: ')
 
 
 def srt_to_txt(srt_files, speaker_tags=DEFAULT_SPEAKER_TAGS):
