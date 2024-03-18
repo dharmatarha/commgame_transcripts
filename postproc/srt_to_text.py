@@ -115,11 +115,12 @@ def clear_empty_subs(subtitles_list, speaker_tags=DEFAULT_SPEAKER_TAGS):
     :return:                List of srt subtitle objects.
     """
     subs_list = copy.deepcopy(subtitles_list)  # Avoid messing up input arg list in place
-    subs_list = [sub for sub in subs_list if sub.content and sub.content not in speaker_tags]
+    stripped_tags = [tag.strip() for tag in speaker_tags]
+    subs_list = [sub for sub in subs_list if sub.content and sub.content not in speaker_tags and sub.content.strip() not in stripped_tags]
     return subs_list
 
 
-def merge_close_subs(subtitles_list, speaker_tags=DEFAULT_SPEAKER_TAGS, time_thr=0.5):
+def merge_close_subs(subtitles_list, speaker_tags=DEFAULT_SPEAKER_TAGS, time_thr=0.5, punct_check=True):
     """
     Helper function to merge subsequent subtitles that (1) belong to the same speaker, (2) are not separate sentences,
     and (3) have only a small temporal gap between them.
@@ -128,6 +129,7 @@ def merge_close_subs(subtitles_list, speaker_tags=DEFAULT_SPEAKER_TAGS, time_thr
                       inserted at the beginning of each subtitle (e.g. if subtitle content was "Hello!", it becomes
                       "SPEAKER1: Hello!"). Defaults to the module constant DEFAULT_SPEAKER_TAGS.
     :param time_thr:        Numeric value, maximum time in seconds between subsequent subtitles for merging them.
+    :param punct_check:     Boolean, flag for checking the punctuation condition or not. Defaults to True.
     :return:                List of srt subtitle objects.
     """
     subs_list = copy.deepcopy(subtitles_list)  # Avoid messing up input arg list in place
@@ -142,8 +144,11 @@ def merge_close_subs(subtitles_list, speaker_tags=DEFAULT_SPEAKER_TAGS, time_thr
 
             # Set the flags marking the necessary conditions for merging to False.
             speaker_match_flag = False
-            punct_flag = False
             temporal_gap_flag = False
+            if punct_check:
+                punct_flag = False
+            else:
+                punct_flag = True
 
             # Check if the two subtitles belong to the same speaker, adjust the flag if yes.
             current_subtitle = sub.content
@@ -154,9 +159,10 @@ def merge_close_subs(subtitles_list, speaker_tags=DEFAULT_SPEAKER_TAGS, time_thr
                 speaker_match_flag = True
 
             # Check if the current subtitle ends without punctuation and the next one does not start with upper case.
-            if (current_subtitle[-1] not in SENTENCE_ENDING_PUNCTUATION_MARKS) and \
-               next_subtitle[len(next_speaker):][0].islower():
-                punct_flag = True
+            if punct_check:
+                if (current_subtitle[-1] not in SENTENCE_ENDING_PUNCTUATION_MARKS) and \
+                   next_subtitle[len(next_speaker):][0].islower():
+                    punct_flag = True
 
             # Check if the time between the two subtitle objects is equal to or below the threshold.
             if (subs_list[sub_idx + 1].start - sub.end).total_seconds() <= time_thr:
@@ -475,7 +481,7 @@ def main():
         # Find srt files for given pair.
         pair_dir = os.path.join(args.data_dir, 'pair' + str(pair))
         print('\nListing srt files for pair ' + str(pair) + ' in ' + pair_dir + '.')
-        pair_srt_files, sessions_list = find_srt_pairs(pair_dir, pair)
+        pair_srt_files, sessions_list = find_srt_pairs(pair_dir, pair, sessions=['freeConv'])
         print('Found srt files for ' + str(len(pair_srt_files)) + ' sessions:')
         print(pair_srt_files)
 
@@ -486,10 +492,12 @@ def main():
             print('Reading srt files, cleaning up subtitles...')
             subtitles_list = srt_to_txt(session_files)
             subtitles_list = replace_patterns_in_subs(subtitles_list)
-            subtitles_list = filter_tags_in_subs(subtitles_list)
+#            subtitles_list = filter_tags_in_subs(subtitles_list)
             subtitles_list = norm_whitespaces_in_subs(subtitles_list)
             subtitles_list = clear_empty_subs(subtitles_list)
-            subtitles_list = merge_close_subs(subtitles_list)
+            subtitles_list = merge_subs_simple(subtitles_list)
+            subtitles_list = merge_subs_simple(subtitles_list)
+            subtitles_list = merge_subs_simple(subtitles_list)
 
             # Write out final list of subtitles as txt.
             subs_list = [sub.content + '\n' for sub in subtitles_list]
