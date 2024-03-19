@@ -201,7 +201,7 @@ def get_resp_times(srt_obj_list, set_negative_to_zero=True):
             current_speaker = [tag for tag in DEFAULT_SPEAKER_TAGS if sub_current.content.startswith(tag)]
             next_speaker = [tag for tag in DEFAULT_SPEAKER_TAGS if sub_next.content.startswith(tag)]
             # Sanity check: could we identify the speakers?
-            assert bool(current_speaker) & bool(next_speaker), 'Could not determine speaker!'
+            assert bool(current_speaker) and bool(next_speaker), 'Could not determine speaker!'
             # Check for equality of speakers, get response time if they are different.
             if current_speaker[0] != next_speaker[0]:
                 resp_time = sub_next.start.total_seconds() - sub_current.end.total_seconds()
@@ -247,7 +247,7 @@ def get_interrupts(srt_obj_list, interrupt_start_min=0.5, interrupt_end_min=0.5,
             current_speaker = [tag for tag in DEFAULT_SPEAKER_TAGS if sub_current.content.startswith(tag)][0]
             next_speaker = [tag for tag in DEFAULT_SPEAKER_TAGS if sub_next.content.startswith(tag)][0]
             # Sanity check: could we identify the speakers?
-            assert bool(current_speaker) & bool(next_speaker), 'Could not determine speaker!'
+            assert bool(current_speaker) and bool(next_speaker), 'Could not determine speaker!'
             # Check for equality of speakers.
             if current_speaker != next_speaker:
                 # Check for subtitle overlap.
@@ -301,17 +301,82 @@ def get_srt_cross_corrs(values_m, values_g, indices_m, indices_g):
     return corr_m, corr_g
 
 
-def get_pauses_in_speech_turns(speech_timeseries, pause_min_len_s=0.2, sampling_rate=200):
+def get_pauses_in_speech_turns(speech_timeseries, srt_obj_list, pause_min_len_s=0.2,
+                               speech_min_len_s=0.2, sampling_rate=TIMESERIES_SAMPLING_RATE_HZ):
+    """
+    Function to calculate the sum of pauses in speech segments. Pauses are defined as silent parts within a speech turn
+    with at least "pause_min_len_s" length (sane values are ~0.18 - 0.2 seconds).
+    :param speech_timeseries: Numpy array, binary, 1D. Voice detection array, with ones corresponding to speech,
+                              zeros to silence. The array corresponds to the same audio recording that "srt_obj_list"
+                              holds the subtitles / transcription for. Its sampling rate is provided in "sampling_rate".
+    :param srt_obj_list:      List of srt subtitle objects, corresponding to speech turns detected in same audio
+                              recording that "speech_timeseries" describes as well.
+    :param pause_min_len_s:   Numeric value, minimum length of silent segment to be considered a pause, in seconds.
+                              Defaults to 0.2.
+    :param speech_min_len_s:  Numeric value, minimum length of speech segment before and after silences in order for
+                              them to be considered pauses. It is in seconds. Calculated cumulatively. Defaults to 0.2.
+                              E.g. for a speech (sp) and silences (si) segment with the following timings (in seconds):
+                              sp(0.5) - si(0.4) - sp(0.15) - si(0.5) - sp(1.1), both silent parts are considered pauses
+                              as there have been enough speech before and after them cumulatively, even if the middle
+                              speech segment (sp(0.15)) is too short to fulfill this condition by its own.
+    :param sampling_rate:     Numeric value, sampling rate of "speech_timeseries" in Hz. Defaults to module-level
+                              constant TIMESERIES_SAMPLING_RATE_HZ.
+    :return: pause_sum:       Numpy array, 1D, where each value corresponds to the total amount of pause in a speech
+                              turn. The length of the array is the same as the length of "srt_obj_list". Values are in
+                              seconds.
+    """
     sp_ts = copy.deepcopy(speech_timeseries)  # Avoid messing up input arg list in place
+    subs_list = copy.deepcopy(srt_obj_list)  # Avoid messing up input arg list in place
     # Pauses are silent parts longer than pause_min_len_s.
+    pause_no = []
     pause_sum = []
-    for ts in sp_ts:
+    speech_sum = []
+    for sub in subs_list:
+        ts = sp_ts[round(sub.start.total_seconds() * sampling_rate):
+                   round(sub.end.total_seconds() * sampling_rate)]
         zero_ranges = zero_runs(ts)
-        if zero_ranges:
-            pause_len = (zero_ranges[:, 1] - zero_ranges[:, 0]) / sampling_rate
-            pause_sum.append(np.sum(pause_len[pause_len >= (pause_min_len_s * sampling_rate)]))
+        one_ranges = zero_runs((ts - 1) * (-1))
+        zero_len_s = (zero_ranges[:, 1] - zero_ranges[:, 0]) / sampling_rate
+        one_len_s = (one_ranges[:, 1] - one_ranges[:, 0]) / sampling_rate
+        total_speech_s = np.sum(one_len_s)
+        # There are only any silences to consider if there are at least 2 runs of ones (2 speech parts) in the segment,
+        # and at least one zero run (silent part). Otherwise there is none.
+        if zero_ranges.shape[0] > 0 and one_ranges.shape[0] > 1:
+            # Pause can only be a zero run (silent part) between runs of ones (speech parts). A further condition is
+            # that the runes of ones (speech parts) before and after the silence must be at least speech_min_len_s long.
+            # Important: speech length is calculated cumulatively so that we do not throw away silence because of a
+            # short, intermittent speech burst at its end, later followed by a longer speech segment.
+            # Boolean array for marking which zero run can be considered a pause:
+            zero_run_is_pause = np.zeros(zero_len_s.shape).astype(bool)
+            for row_idx in range(zero_ranges.shape[0]):
+                # Flags for tracking the necessary conditions for declaring a silent part a pause.
+                speech_before_flag = False
+                speech_after_flag = False
+                # Get the number of rows in one_ranges before current zero run and check their cumulative length.
+                ones_before_current_silence_idx = np.where(one_ranges[:, 0] < zero_ranges[row_idx, 0])[0]  # Returns an array.
+                if ones_before_current_silence_idx.size > 0 and \
+                        np.sum(one_len_s[ones_before_current_silence_idx]) > speech_min_len_s:
+                    speech_before_flag = True
+                # Get the number of rows in one_ranges following current zero run and check their cumulative length.
+                ones_after_current_silence_idx = np.where(one_ranges[:, 0] > zero_ranges[row_idx, 0])[0]  # Returns an array.
+                if ones_after_current_silence_idx.size > 0 and \
+                        np.sum(one_len_s[ones_after_current_silence_idx]) > speech_min_len_s:
+                    speech_after_flag = True
+                # Check if all conditions are met.
+                if speech_before_flag and speech_after_flag and zero_len_s[row_idx] >= pause_min_len_s:
+                    zero_run_is_pause[row_idx] = True
+            # After looping through the zero runs, the total pause is the sum of pauses.
+            pause_sum.append(np.sum(zero_len_s[zero_run_is_pause]))
+            # Number of pauses is just the no. of zero runs meeting all conditions.
+            pause_no.append(np.sum(zero_run_is_pause))
 
-    return pause_sum
+        else:
+            pause_sum.append(0)
+            pause_no.append(0)
+
+        speech_sum.append(total_speech_s)
+
+    return np.asarray(pause_sum), np.asarray(pause_no), np.asarray(speech_sum)
 
 
 def zero_runs(arr):
@@ -353,6 +418,12 @@ def main():
     # vars about number of turns
     pros_df.loc[:, 'turn_no'] = None
     pros_df.loc[:, 'turn_rate'] = None
+    # vars about pauses
+    pros_df.loc[:, 'pause_no'] = None
+    pros_df.loc[:, 'pause_sum'] = None
+    pros_df.loc[:, 'pause_ratio'] = None
+    pros_df.loc[:, 'pause_per_speech_min'] = None
+    pros_df.loc[:, 'pause_sum_per_turn'] = None
 
     # Load csv
     stat_df = pd.read_csv(os.path.join(DATA_DIR, BASE_TABLE_CSV))
@@ -394,6 +465,15 @@ def main():
     stat_df.loc[:, 'diff_turn_no'] = None
     stat_df.loc[:, 'mean_turn_rate'] = None
     stat_df.loc[:, 'diff_turn_rate'] = None
+    # vars about pauses
+    stat_df.loc[:, 'mean_pause_no'] = None
+    stat_df.loc[:, 'diff_pause_no'] = None
+    stat_df.loc[:, 'mean_pause_sum'] = None
+    stat_df.loc[:, 'diff_pause_sum'] = None
+    stat_df.loc[:, 'mean_pause_sum_per_min'] = None
+    stat_df.loc[:, 'diff_pause_sum_per_min'] = None
+    stat_df.loc[:, 'mean_pause_sum_per_turn'] = None
+    stat_df.loc[:, 'diff_pause_sum_per_turn'] = None
 
     # Loop through real and pseudo pairs (rows) of stat_df
     for pair_idx in stat_df.index:
@@ -479,12 +559,20 @@ def main():
             resp_time_autocorr_g = np.corrcoef(resp_t_g[:-1], resp_t_g[1:])[0, 1]
             resp_time_corr_m, resp_time_corr_g = get_srt_cross_corrs(resp_t_m, resp_t_g, resp_idx_m, resp_idx_g)
 
-            # Get interruptions
+            # Get interruptions.
             interrupt_indices, interrupt_idx_m, interrupt_idx_g = get_interrupts(joint_srts)
             interrupt_no_m = len(interrupt_idx_m)
             interrupt_no_g = len(interrupt_idx_g)
             interrupt_rate_m = len(interrupt_idx_m) / session_len_min
             interrupt_rate_g = len(interrupt_idx_g) / session_len_min
+
+            # Get pauses.
+            pauses_sum_m, pause_no_m, speech_sum_m = get_pauses_in_speech_turns(speech_ts_m, srt_m,
+                                                                                pause_min_len_s=0.2,
+                                                                                speech_min_len_s=0.2)
+            pauses_sum_g, pause_no_g, speech_sum_g = get_pauses_in_speech_turns(speech_ts_g, srt_g,
+                                                                                pause_min_len_s=0.2,
+                                                                                speech_min_len_s=0.2)
 
             # Store vars in dataframe.
             # Speech turn length.
@@ -524,9 +612,17 @@ def main():
             pros_df.loc[idx_m, 'turn_rate'] = turn_rate_m
             pros_df.loc[idx_g, 'turn_no'] = turn_no_g
             pros_df.loc[idx_g, 'turn_rate'] = turn_rate_g
-
-
-
+            # Pauses
+            pros_df.loc[idx_m, 'pause_no'] = np.sum(pause_no_m)
+            pros_df.loc[idx_m, 'pause_sum'] = np.sum(pauses_sum_m)
+            pros_df.loc[idx_m, 'pause_ratio'] = np.sum(pauses_sum_m) / np.sum(speech_sum_m)
+            pros_df.loc[idx_m, 'pause_per_speech_min'] = np.sum(pause_no_m) / (np.sum(speech_sum_m) / 60)
+            pros_df.loc[idx_m, 'pause_sum_per_turn'] = np.sum(pause_no_m) / len(srt_m)
+            pros_df.loc[idx_g, 'pause_no'] = np.sum(pause_no_g)
+            pros_df.loc[idx_g, 'pause_sum'] = np.sum(pauses_sum_g)
+            pros_df.loc[idx_g, 'pause_ratio'] = np.sum(pauses_sum_g) / np.sum(speech_sum_g)
+            pros_df.loc[idx_g, 'pause_per_speech_min'] = np.sum(pause_no_g) / (np.sum(speech_sum_g) / 60)
+            pros_df.loc[idx_g, 'pause_sum_per_turn'] = p.sum(pause_no_g) / len(srt_g)
 
 
 
